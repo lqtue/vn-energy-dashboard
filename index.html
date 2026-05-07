@@ -177,7 +177,7 @@
     </div>
 
     <div class="group">
-      <div class="group-head"><h2>Summary</h2><span class="subtle">within current filters</span></div>
+      <div class="group-head"><h2>Plants</h2><span class="subtle">within current filters</span></div>
 
       <div class="stat-row">
         <div class="stat"><div class="l">Plants</div><div class="v" id="m-count">—</div></div>
@@ -201,6 +201,25 @@
           <div class="histo" id="cap-histo"></div>
           <input type="range" id="cap-min" min="0" max="4000" value="0" step="10">
         </div>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="group-head"><h2>Grid</h2><span class="subtle">transmission &amp; substations</span></div>
+
+      <div class="stat-row">
+        <div class="stat"><div class="l">Lines</div><div class="v" id="g-lines">—</div></div>
+        <div class="stat"><div class="l">Length</div><div class="v" id="g-km">—<span class="u"> km</span></div></div>
+      </div>
+
+      <div>
+        <div class="mix-bar" id="grid-mix-bar"></div>
+        <div class="mix-legend" id="grid-mix-legend"></div>
+      </div>
+
+      <div class="section" style="border:0;padding:0;margin:0">
+        <h2>Substations by voltage</h2>
+        <div id="sub-bars"></div>
       </div>
     </div>
 
@@ -309,7 +328,18 @@ const state = {
   capMin: 0,
   province: '',
   selectedId: null,
-  data: { plants: null },
+  voltBand: null,   // null = all voltages; otherwise a band label
+  data: { plants: null, grid: null },
+};
+
+// Voltage band predicates — must match the Python build script
+const BAND_RANGES = {
+  '≥ 500 kV': [500, Infinity],
+  '220 kV':   [220, 500],
+  '110 kV':   [110, 220],
+  '35–66 kV': [35, 110],
+  '< 35 kV':  [0.0001, 35],   // strictly > 0
+  'Unknown':  [0, 0.0001],    // exactly 0 / null
 };
 
 const map = new maplibregl.Map({
@@ -336,11 +366,13 @@ const fetchJSON = url => fetch(url, { cache: 'force-cache' }).then(r => r.json()
 
 map.on('load', async () => {
   // Tier 1: critical for first paint — small, fast
-  const [plants, provinces] = await Promise.all([
+  const [plants, provinces, grid] = await Promise.all([
     fetchJSON('data/plants.geojson'),
     fetchJSON('data/provinces.geojson'),
+    fetchJSON('data/grid_stats.json'),
   ]);
   state.data.plants = plants;
+  state.data.grid = grid;
 
   map.addSource('plants', { type: 'geojson', data: plants, generateId: true });
   map.addSource('provinces', { type: 'geojson', data: provinces });
@@ -406,6 +438,7 @@ map.on('load', async () => {
   attachPopups();
   document.getElementById('chip-reset').addEventListener('click', resetAllFilters);
   applyFilters();
+  renderGridOverview();
 });
 
 function buildFuelTiles() {
@@ -650,6 +683,15 @@ function renderChips() {
       applyFilters();
     }});
   }
+  if (state.voltBand) {
+    chips.push({ label: `Grid: ${state.voltBand}`, clear: () => {
+      state.voltBand = null;
+      applyVoltFilter();
+      syncVoltUI();
+      renderGridOverview();
+      applyFilters();
+    }});
+  }
   if (chips.length === 0) { sec.style.display = 'none'; return; }
   sec.style.display = 'block';
   root.innerHTML = '';
@@ -666,10 +708,14 @@ function resetAllFilters() {
   state.fuels = new Set(FUEL_ORDER);
   state.capMin = 0;
   state.province = '';
+  state.voltBand = null;
   document.getElementById('cap-min').value = 0;
   document.getElementById('cap-min-label').textContent = '0';
   document.getElementById('province-filter').value = '';
   syncFuelTilesUI();
+  applyVoltFilter();
+  syncVoltUI();
+  renderGridOverview();
   applyFilters();
 }
 
@@ -759,6 +805,95 @@ function toggleSoloFuel(fuel) {
   }
   syncFuelTilesUI();
   applyFilters();
+}
+
+function renderGridOverview() {
+  const g = state.data.grid;
+  if (!g) return;
+  document.getElementById('g-lines').textContent = g.transmission.count.toLocaleString();
+  document.getElementById('g-km').innerHTML = `${fmtKm(g.transmission.total_km)}<span class="u"> km</span>`;
+
+  // Voltage mix bar — weighted by km
+  const bar = document.getElementById('grid-mix-bar');
+  const legend = document.getElementById('grid-mix-legend');
+  bar.innerHTML = ''; legend.innerHTML = '';
+  const total = g.transmission.bands.reduce((s, b) => s + (b.value || 0), 0);
+  for (const b of g.transmission.bands) {
+    if (!b.value) continue;
+    const pct = (b.value / total) * 100;
+    const seg = document.createElement('div');
+    seg.className = 'seg';
+    seg.style.flex = pct;
+    seg.style.background = b.color;
+    seg.title = `${b.label} · ${pct.toFixed(1)}% · ${fmtKm(b.value)} km`;
+    seg.addEventListener('click', () => toggleVoltBand(b.label));
+    bar.appendChild(seg);
+
+    const lg = document.createElement('span');
+    lg.className = 'it';
+    lg.title = `Click to filter to ${b.label}`;
+    lg.innerHTML = `<span class="sw" style="background:${b.color}"></span>${b.label} <span class="v">${pct.toFixed(0)}%</span>`;
+    lg.addEventListener('click', () => toggleVoltBand(b.label));
+    legend.appendChild(lg);
+  }
+  syncVoltUI();
+
+  // Substation bars by voltage
+  const root = document.getElementById('sub-bars');
+  root.innerHTML = '';
+  const ssMax = Math.max(1, ...g.substations.bands.map(b => b.count));
+  for (const b of g.substations.bands) {
+    const pct = (b.count / ssMax) * 100;
+    const isActive = state.voltBand === b.label;
+    const el = document.createElement('div');
+    el.className = `prov-clickable${isActive ? ' is-active' : ''}`;
+    el.title = isActive ? 'Click to clear filter' : `Filter to ${b.label}`;
+    el.innerHTML = `
+      <div class="prov-row">
+        <div class="pn"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${b.color};margin-right:6px;vertical-align:middle"></span>${b.label}</div>
+        <div class="pv">${b.count.toLocaleString()}</div>
+      </div>
+      <div class="bar"><div style="width:${pct}%;background:${b.color}"></div></div>`;
+    el.addEventListener('click', () => toggleVoltBand(b.label));
+    root.appendChild(el);
+  }
+}
+
+function toggleVoltBand(label) {
+  state.voltBand = (state.voltBand === label) ? null : label;
+  applyVoltFilter();
+  syncVoltUI();
+  renderGridOverview();
+  renderChips();
+}
+
+function applyVoltFilter() {
+  const v = ['coalesce', ['to-number', ['get', 'voltage_kv']], 0];
+  let f = null;
+  if (state.voltBand) {
+    const [lo, hi] = BAND_RANGES[state.voltBand];
+    if (state.voltBand === 'Unknown') {
+      f = ['==', v, 0];
+    } else if (state.voltBand === '< 35 kV') {
+      f = ['all', ['>', v, 0], ['<', v, 35]];
+    } else {
+      f = ['all', ['>=', v, lo], ['<', v, hi]];
+    }
+  }
+  map.setFilter('transmission-line', f);
+  map.setFilter('substations-circle', f);
+}
+
+function syncVoltUI() {
+  const segs = document.querySelectorAll('#grid-mix-bar .seg');
+  segs.forEach(s => {
+    s.style.opacity = (state.voltBand && !s.title.startsWith(state.voltBand)) ? 0.3 : 1;
+  });
+}
+
+function fmtKm(v) {
+  if (v >= 1000) return (v / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+  return Math.round(v).toLocaleString();
 }
 
 function renderProvinceBars(rows) {

@@ -1,0 +1,80 @@
+{
+  "transmission": {
+    "count": 10996,
+    "total_km": 32151.9,
+    "bands": [
+      {
+        "label": "≥ 500 kV",
+        "color": "#d32f2f",
+        "count": 5080,
+        "value": 9119.183348460872
+      },
+      {
+        "label": "220 kV",
+        "color": "#f57c00",
+        "count": 1258,
+        "value": 10761.402250217992
+      },
+      {
+        "label": "110 kV",
+        "color": "#fbc02d",
+        "count": 2512,
+        "value": 9938.220852587949
+      },
+      {
+        "label": "35–66 kV",
+        "color": "#43a047",
+        "count": 1,
+        "value": 2.5078671012050355
+      },
+      {
+        "label": "< 35 kV",
+        "color": "#9aa4b2",
+        "count": 10,
+        "value": 72.42952473330249
+      },
+      {
+        "label": "Unknown",
+        "color": "#cdd5df",
+        "count": 2135,
+        "value": 2258.145570030606
+      }
+    ]
+  },
+  "substations": {
+    "count": 1541,
+    "total_mva": 206.0,
+    "bands": [
+      {
+        "label": "≥ 500 kV",
+        "color": "#d32f2f",
+        "count": 53
+      },
+      {
+        "label": "220 kV",
+        "color": "#f57c00",
+        "count": 212
+      },
+      {
+        "label": "110 kV",
+        "color": "#fbc02d",
+        "count": 694
+      },
+      {
+        "label": "35–66 kV",
+        "color": "#43a047",
+        "count": 2
+      },
+      {
+        "label": "< 35 kV",
+        "color": "#9aa4b2",
+        "count": 2
+      },
+      {
+        "label": "Unknown",
+        "color": "#cdd5df",
+        "count": 578
+      }
+    ]
+  }
+}
