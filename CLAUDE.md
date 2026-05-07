@@ -4,76 +4,93 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A single-file MapLibre GL dashboard for Vietnam's power infrastructure (plants, transmission, substations). The repo is a **standalone deliverable** carved out of the parent `vn_energy/` project — only the runtime artifacts live here. Source data and the scripts that produce the GeoJSON/PMTiles files in `data/` live upstream in the parent repo and are *not* part of this codebase.
+A single-file MapLibre GL dashboard for Vietnam's power infrastructure (plants, transmission, substations) with a target-screener + context drawer overlaid on the map. The repo is a **standalone deliverable** carved out of the parent `vn_energy/` project — only the runtime artifacts live here. Source data and the scripts that produce the GeoJSON files in `data/` live upstream in the parent repo and are *not* part of this codebase.
 
 Live at https://lqtue.github.io/vn-energy-dashboard/.
 
 ## Commands
 
-There is no build step, no test suite, and no linter. The whole app is `index.html` + a service worker + static data.
+There is no build step, no test suite, and no linter. The whole app is `index.html` + a service worker + static GeoJSON.
 
 - **Local dev:** `python3 -m http.server 8000` then open http://localhost:8000.
-  - Local Python HTTP server returns `200 OK` to byte-range requests, which is fine for testing — but PMTiles will fall back to full-file fetches locally. To test the production range-request path, hit the deployed URL or use a server that supports ranges (e.g. `npx serve` does not; `caddy file-server` does).
 - **Deploy:** `git push origin main` — GitHub Pages auto-builds from `main`/root.
-- **Regenerate PMTiles** (when upstream data changes):
-  ```
-  tippecanoe -o data/transmission.pmtiles -Z4 -z12 -l transmission \
-    --drop-densest-as-needed --extend-zooms-if-still-dropping --force \
-    /path/to/upstream/transmission.geojson
-  tippecanoe -o data/substations.pmtiles -Z5 -z14 -l substations -B5 \
-    --drop-densest-as-needed --force /path/to/upstream/substations.geojson
-  ```
-- **Regenerate `data/grid_stats.json`:** `python3 ../../../scripts/processing/build_grid_stats.py` from the parent `vn_energy/` repo. The dashboard reads this for the Grid sidebar overview because PMTiles only deliver viewport tiles — aggregate counts and km totals can't be computed client-side.
+- **Regenerate data:** the four `data/*.geojson` files are produced by the parent `vn_energy/` repo (`scripts/processing/standardize_schema.py` and friends). Copy the outputs in when upstream changes.
 
 ## Architecture
 
-### Data tiering — performance-critical
+### Data
 
-Cold-load is staged. Don't undo this without checking weight tradeoffs:
+All four layers are GeoJSON, loaded eagerly on map load:
 
-| Tier | What | Format | Loaded when |
+| File | Used for | Size | Notes |
 |---|---|---|---|
-| 1 | `plants.geojson`, `provinces.geojson`, `grid_stats.json` | GeoJSON / JSON | Blocks first paint. Total <500 KB. |
-| 2 | `transmission.pmtiles` | Vector tiles | On-demand by viewport (byte-range) |
-| 2 | `substations.pmtiles` | Vector tiles | On-demand by viewport |
+| `data/plants.geojson` | Plants layer + screener + context drawer | ~90 KB | Held in memory for screener filtering and drawer computations. |
+| `data/provinces.geojson` | Province boundary outlines | ~325 KB | |
+| `data/transmission.geojson` | Transmission lines | ~6.7 MB | Largest payload; blocks first paint. |
+| `data/substations.geojson` | Substations | ~700 KB | |
 
-`grid_stats.json` is a tiny pre-computed aggregate (line counts, total km by voltage band, substation counts by band). It exists because the grid layers are PMTiles, so client-side iteration is impossible — anything that would otherwise be `data.transmission.features.reduce(...)` for plants must be baked at build time for the grid.
+**Tradeoff note:** an earlier build used PMTiles + a jsDelivr proxy (GitHub Pages doesn't honor HTTP `Range` requests). That was dropped in favor of plain GeoJSON for simpler handling — the cost is ~7 MB extra at cold load. If transmission grows further, the right move is either to lazy-load it on first toggle or to bring PMTiles back for that one layer.
 
-Tier-1 files are small enough that GeoJSON is fine; switching them to PMTiles would add overhead with no benefit.
+### Sidebar layout
 
-### PMTiles + jsDelivr (the non-obvious bit)
+Top-down:
 
-PMTiles requires HTTP `Range` requests. **GitHub Pages returns `200 OK` with the full body for ranged requests instead of `206 Partial Content`** — which breaks PMTiles. The workaround is to serve `.pmtiles` files from **jsDelivr**, which proxies GitHub raw and honors ranges:
+1. **Search + screener panel** — single search input (plant name filter) with a filter-toggle button that reveals an inline form (fuel pills, capacity range, COD year, status, province, owner-contains). Results list + CSV export below. Matches stay full-opacity on the map; non-matches dim. See `setupSearchScreen()` and `applyScreenHighlight()` in `index.html`.
+2. **Plants card** — color-by selector (Fuel / Owner / Status / Capacity), mix bar with click-to-solo legend, capacity slider with histogram.
+3. **Transmission card** — mix bar by voltage band (km totals); click a band to solo.
+4. **Substations card** — voltage-band rows (count); click to solo. Layer hidden by default.
+5. **Map card** — province-boundary toggle, basemap segmented control.
 
-```js
-const PMT = 'https://cdn.jsdelivr.net/gh/lqtue/vn-energy-dashboard@main/data';
-map.addSource('transmission', { type: 'vector', url: `pmtiles://${PMT}/transmission.pmtiles` });
-```
+### Plant click → context drawer
 
-If you migrate to a host that supports ranges (Cloudflare Pages, R2, Netlify), drop the jsDelivr indirection and use same-origin URLs.
+Clicking a plant opens a slide-in drawer at the top-right of the map area (`#ctx`). Built in `openContext()` / `renderContextSections()`. Sections:
 
-**jsDelivr cache caveat:** the `@main` ref is cached for up to ~24h. To force a refresh after a data update, pin to a commit SHA (`@<sha>`) or bump the file path.
+- **Asset facts** — capacity, fuel, status, COD, owner, province.
+- **Grid context** — nearest substation, nearest 220 kV+ substation (transmission-grade), nearest transmission line. Distances computed in JS via haversine + point-to-segment (`pointToLineKm`).
+- **Owner portfolio** (only if owner present) — count + total MW of plants by the same owner string. Listed peer rows are clickable to jump between owner assets.
+- **Peers within 50 km** — grouped by fuel.
+- **Province context** — rollup of all plants in the same province.
+
+Same-owner plants get a soft accent ring on the map via the `plants-owner-highlight` layer (filter set to `==` on owner when a plant is selected).
+
+### Color-by
+
+The Plants card has a 4-way segmented control. State is `state.colorBy` ∈ `'fuel' | 'owner' | 'status' | 'capacity'`. Helpers in `index.html`:
+
+- `colorExprFor(mode)` — returns the MapLibre paint expression.
+- `categoryFor(feature, mode)` — string label for the feature's category.
+- `colorFor(cat, mode)` — hex for a category.
+- `catFilterFor(cats, mode)` — filter expression for solo'd categories.
+- `orderedCatsFor(mode, byCat)` — canonical ordering for the legend.
+- `buildOwnerPalette(plants)` — runs once on load; assigns colors to the top-N owners by MW; long-tail collapses to "Other", missing → "— Unknown".
+
+Switching modes clears `state.cats` (the solo set is mode-relative).
+
+### Map paint coordination
+
+Two independent paint mechanisms apply to `plants-circle`:
+
+- `circle-color` is owned by the color-by system.
+- `circle-opacity` and stroke props are owned by the screener highlight (`applyScreenHighlight`).
+
+These don't conflict because they're different paint keys, but if you add a third paint mutator be careful to keep them disjoint or coordinated.
 
 ### Service worker (`sw.js`)
 
 - **Cache-first, ~permanent** for `/data/*.geojson` and basemap raster tiles (CARTO, Esri).
 - **Network-first** for HTML so deploys land on next visit.
-- **Skips `.pmtiles`** — intercepting byte-range requests in a service worker breaks the protocol. The browser handles range caching natively.
+- Bump the `VERSION` constant when changing cache strategy or shipping a major rewrite — old clients hold on to the previous shell otherwise.
 
-When changing cache strategy, bump the `VERSION` constant at the top of `sw.js` to invalidate old caches.
+### Basemaps
 
-### State and rendering
+Four configurations in the `BASEMAPS` object: `light`, `voyager` (streets), `dark`, `satellite`. The `light` and `dark` basemaps use CARTO's `_all` variants (labels baked in) so only the bg layer fetches tiles. Only `satellite` uses the separate labels overlay (CARTO `dark_only_labels` over Esri imagery).
 
-`index.html` keeps a small global `state` object (`fuels`, `capMin`, `province`, `selectedId`). All filtering is done via MapLibre filter expressions on layers (`map.setFilter('plants-circle', ...)`), not by mutating sources. Sidebar metrics are recomputed in JS by re-filtering `state.data.plants.features` — the GeoJSON is held in memory specifically for this.
+CARTO tile URLs rotate across `a/b/c/d.basemaps.cartocdn.com` for parallelism. `@2x` retina tiles are not used — saves ~3× the bytes at the cost of slightly less crisp rendering on retina screens.
 
-Selection uses a separate `plants-selected` layer with a `==` filter on `id`, layered above `plants-circle`. Clicking the map dispatches via `map.queryRenderedFeatures()` against an explicit layer order (plants > transmission > substations), so layer Z and the click priority are coupled — keep them in sync if reordering.
-
-### Basemap switching
-
-Basemaps are swapped by mutating tile URLs on the existing raster sources (`map.getSource('basemap-bg').setTiles(...)`), not by reloading the style. This avoids losing the data layers. The four configurations are in the `BASEMAPS` object.
+Switching basemaps mutates tile URLs on existing raster sources rather than reloading the style — preserves data layers.
 
 ## Upstream data contract
 
-The GeoJSON/PMTiles in `data/` are produced by `scripts/processing/build_gppd_dashboard.py` and `standardize_schema.py` in the parent `vn_energy/` repo. The standardized schema (plants: `id`, `name`, `fuel_type`, `capacity_mw`, `province`, `cod`, `status`, `owner`, `source` …) is documented there and **must not be changed unilaterally** in this repo — the dashboard relies on those exact field names in filter expressions and the click-through panel.
+The GeoJSON in `data/` follows the standardized schema documented in the parent repo's CLAUDE.md. Plants must have `id`, `name`, `fuel_type`, `capacity_mw`, `province`, `cod`, `status`, `owner`, `source` — these field names are referenced directly in MapLibre filter expressions, the screener form, and the drawer rendering. **Do not change them unilaterally** in this repo.
 
-Fuel types in the data must match the `FUELS` array in `index.html` (Hydro, Solar, Wind, Gas, Coal, Oil, Biomass). Any new fuel needs both an SVG `<symbol>` and a `FUELS` entry, or it'll fall through to the gray "unknown" colour.
+Fuel types in the data must match the `FUELS` array in `index.html` (Hydro, Solar, Wind, Gas, Coal, Oil, Biomass — case-sensitive). Anything else falls through to the gray "unknown" colour. The owner palette is computed from the loaded data on each session.
