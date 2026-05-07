@@ -1,7 +1,7 @@
 // Vietnam Energy Atlas — service worker
 // Cache-first for own data + basemap tiles. Network-first for HTML/JS so updates land.
 
-const VERSION = 'v1';
+const VERSION = 'v5';
 const DATA_CACHE = `vn-energy-data-${VERSION}`;
 const TILE_CACHE = `vn-energy-tiles-${VERSION}`;
 const SHELL_CACHE = `vn-energy-shell-${VERSION}`;
@@ -31,10 +31,6 @@ self.addEventListener('fetch', e => {
     e.respondWith(cacheFirst(req, DATA_CACHE));
     return;
   }
-
-  // PMTiles uses HTTP byte-range requests — don't intercept; browser handles caching.
-  // Touching range requests in a service worker breaks the protocol.
-  if (url.pathname.endsWith('.pmtiles')) return;
 
   // Basemap raster tiles (CARTO + Esri) — cache-first
   if (url.hostname.endsWith('basemaps.cartocdn.com') ||

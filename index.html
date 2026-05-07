@@ -7,7 +7,6 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6' fill='%231e88e5'/%3E%3C/svg%3E" />
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="https://unpkg.com/pmtiles@4.4.1/dist/pmtiles.js"></script>
 <style>
   :root {
     --bg: #ffffff;
@@ -25,334 +24,399 @@
   html, body { margin: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
   #app { display: grid; grid-template-columns: 340px 1fr; height: 100vh; }
   #map { height: 100%; }
-  .panel { background: var(--panel); padding: 24px; overflow-y: auto; border-right: 1px solid var(--line); }
-  .panel > .section + .section { border-top: 1px solid var(--line-2); padding-top: 20px; margin-top: 20px; }
-  .panel > .group + .group { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--line); }
-  .group { display: flex; flex-direction: column; gap: 18px; }
-  .group > .group-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: -4px; }
-  .group > .group-head h2 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--accent); margin: 0; border: 0; padding: 0; display: inline; }
-  .group > .group-head .subtle { color: var(--muted); font-size: 11px; }
+  .panel { background: var(--panel); padding: 20px; overflow-y: auto; border-right: 1px solid var(--line); }
 
-  .header h1 { font-size: 20px; font-weight: 700; margin: 0 0 10px; letter-spacing: -0.2px; }
-  .header p { color: var(--text-2); font-size: 13px; line-height: 1.5; margin: 0 0 4px; }
+  .header h1 { font-size: 20px; font-weight: 700; margin: 0 0 12px; letter-spacing: -0.2px; }
 
-  .section h2 { font-size: 13px; font-weight: 600; margin: 0 0 10px; letter-spacing: -0.1px; color: var(--text-2); }
-  .section .h-sub { color: var(--muted); font-size: 12px; margin: -6px 0 10px; }
+  /* search */
+  .search { position: relative; margin-bottom: 14px; }
+  .search input { width: 100%; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px 9px 32px; font-size: 13px; font-family: inherit; color: var(--text); }
+  .search input::placeholder { color: var(--muted); }
+  .search input:focus { outline: none; border-color: var(--accent); background: #fff; }
+  .search::before { content: ''; position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b95a3' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E") center/contain no-repeat; pointer-events: none; }
+  .search-row { position: relative; display: flex; gap: 6px; }
+  .search-row .search { flex: 1; }
+  .filter-toggle { flex: none; width: 36px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; cursor: pointer; padding: 0; display: grid; place-items: center; transition: background .12s, border-color .12s; }
+  .filter-toggle:hover { border-color: #c9d1dc; }
+  .filter-toggle.on { background: var(--accent-soft); border-color: var(--accent); }
+  .filter-toggle svg { width: 16px; height: 16px; stroke: var(--text-2); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: stroke .12s; }
+  .filter-toggle.on svg { stroke: var(--accent); }
+  .filter-toggle .badge { position: absolute; top: -4px; right: -4px; background: var(--accent); color: #fff; font-size: 9px; font-weight: 700; border-radius: 999px; padding: 1px 5px; min-width: 14px; text-align: center; line-height: 1.4; display: none; }
+  .filter-toggle.has-filters .badge { display: inline-block; }
 
-  /* fuel tiles */
-  .tile-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
-  .tile { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 12px 8px 10px; display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer; transition: border-color .15s, box-shadow .15s, transform .05s; user-select: none; }
-  .tile:hover { border-color: #c9d1dc; }
-  .tile:active { transform: translateY(1px); }
-  .tile .icon { width: 38px; height: 38px; border-radius: 50%; background: #fff; border: 1.5px solid var(--line); display: grid; place-items: center; transition: background .15s, border-color .15s; }
-  .tile .icon svg { width: 20px; height: 20px; stroke: #b0b8c2; fill: none; stroke-width: 1.8; transition: stroke .15s; }
-  .tile .label { font-size: 12px; color: var(--text-2); }
-  .tile .count { font-size: 10px; color: var(--muted); margin-top: -2px; }
-  .tile.active { border-color: var(--fc); background: color-mix(in srgb, var(--fc) 6%, #fff); }
-  .tile.active .icon { background: var(--fc); border-color: var(--fc); }
-  .tile.active .icon svg { stroke: #fff; }
-  .tile.active .label { color: var(--text); font-weight: 600; }
-  .tile.active .count { color: var(--fc); font-weight: 600; }
+  /* search filter panel + results */
+  .search-panel { margin-top: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); display: none; overflow: hidden; }
+  .search-panel.show { display: block; }
+  .search-panel .form-wrap { padding: 12px; }
+  .search-meta { display: flex; align-items: center; padding: 10px 12px; background: #fff; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--text-2); }
+  .search-meta b { color: var(--text); font-weight: 600; margin-right: 4px; }
+  .search-meta .actions { margin-left: auto; display: flex; gap: 6px; }
+  .search-meta button { padding: 4px 10px; font-size: 11.5px; border-radius: 6px; cursor: pointer; font-family: inherit; border: 1px solid var(--line); background: #fff; color: var(--text-2); transition: all .12s; }
+  .search-meta button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 500; }
+  .search-meta button.primary:hover { filter: brightness(1.08); }
+  .search-meta button:not(.primary):hover { background: var(--panel-2); }
+  .search-list { max-height: 320px; overflow-y: auto; background: #fff; }
+  .search-list:empty { display: none; }
+
+  /* card */
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; transition: border-color .15s, background .15s; }
+  .card + .card { margin-top: 10px; }
+  .card[data-active="false"] { background: var(--panel-2); }
+  .card[data-active="false"] .card-body { opacity: 0.4; pointer-events: none; user-select: none; }
+  .card-head { padding: 12px 14px; display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
+  .card-head .tgl { width: 16px; height: 16px; flex: none; accent-color: var(--accent); cursor: pointer; }
+  .card-head h2 { margin: 0; font-size: 13.5px; font-weight: 700; letter-spacing: -0.1px; color: var(--text); }
+  .card-head .stats { margin-left: auto; font-size: 12px; color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .card-head .stats b { color: var(--text); font-weight: 600; }
+  .card-body { padding: 0 14px 14px; display: flex; flex-direction: column; gap: 14px; }
 
   /* slider */
-  .slider-wrap { padding-top: 4px; }
   .slider-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; font-size: 12px; color: var(--text-2); }
   .slider-head b { color: var(--text); font-weight: 600; font-size: 13px; }
-  .histo { height: 28px; display: flex; align-items: flex-end; gap: 2px; margin-bottom: 4px; }
-  .histo .bk { flex: 1; background: var(--line); border-radius: 1px; transition: background .15s; }
+  .histo { height: 24px; display: flex; align-items: flex-end; gap: 2px; margin-bottom: 4px; }
+  .histo .bk { flex: 1; background: var(--line); border-radius: 1px; }
   .histo .bk.in { background: var(--accent); }
   input[type=range] { width: 100%; -webkit-appearance: none; background: transparent; margin: 0; }
   input[type=range]::-webkit-slider-runnable-track { height: 3px; background: var(--line); border-radius: 2px; }
   input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; background: #fff; border: 2px solid var(--accent); border-radius: 50%; margin-top: -6px; box-shadow: 0 1px 3px rgba(0,0,0,.1); cursor: pointer; }
 
-  /* select */
-  select { width: 100%; background: #fff; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; font-size: 13px; font-family: inherit; }
-  select:focus { outline: none; border-color: var(--accent); }
+  .body-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: -4px; }
 
-  /* layer + basemap rows */
-  .row-list label { display: flex; align-items: center; justify-content: space-between; font-size: 13px; padding: 6px 0; cursor: pointer; color: var(--text-2); }
-  .row-list label input { accent-color: var(--accent); }
-  .seg { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; background: var(--panel-2); border-radius: 8px; padding: 3px; gap: 2px; }
-  .seg button { background: transparent; border: 0; padding: 6px 4px; font-size: 11px; color: var(--text-2); border-radius: 6px; cursor: pointer; font-family: inherit; transition: background .15s, color .15s; }
-  .seg button.active { background: #fff; color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.06); font-weight: 600; }
-
-  /* metrics row */
-  .stat-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .stat { background: var(--panel-2); border-radius: 10px; padding: 12px; }
-  .stat .l { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; }
-  .stat .v { font-size: 20px; font-weight: 700; margin-top: 4px; letter-spacing: -0.3px; }
-  .stat .u { font-size: 11px; color: var(--muted); margin-left: 4px; font-weight: 500; }
-
-  /* stacked fuel-mix bar */
-  .mix-bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--line); }
-  .mix-bar .seg { transition: flex .25s ease; cursor: pointer; }
+  /* mix bar */
+  .mix-bar { display: flex; height: 9px; border-radius: 5px; overflow: hidden; background: var(--line); }
+  .mix-bar .seg { transition: opacity .15s, filter .15s; cursor: pointer; }
   .mix-bar .seg:hover { filter: brightness(1.08); }
-  .mix-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px; font-size: 11px; color: var(--text-2); }
-  .mix-legend .it { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+  .mix-legend { display: flex; flex-wrap: wrap; gap: 5px 12px; margin-top: 6px; font-size: 11px; color: var(--text-2); }
+  .mix-legend .it { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; transition: opacity .15s; }
   .mix-legend .it .sw { width: 8px; height: 8px; border-radius: 50%; }
   .mix-legend .it .v { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
-  .mix-legend .it:hover { color: var(--text); }
+  .mix-legend .it.dim, .mix-bar .seg.dim { opacity: 0.3; }
 
-  /* province bars */
-  .prov-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: baseline; font-size: 12px; padding: 4px 0 2px; color: var(--text-2); }
-  .prov-row .pn { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .prov-row .pv { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; font-size: 11px; }
-  .bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; margin-bottom: 6px; }
-  .bar > div { height: 100%; background: var(--accent); }
+  /* substation voltage rows */
+  .sub-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: baseline; font-size: 12px; padding: 4px 6px; margin: 0 -6px; border-radius: 6px; cursor: pointer; transition: background .12s; }
+  .sub-row:hover { background: var(--panel-2); }
+  .sub-row.active { background: var(--accent-soft); }
+  .sub-row .pn { color: var(--text-2); display: flex; align-items: center; gap: 7px; }
+  .sub-row .pn .sw { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .sub-row .pv { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; font-size: 11px; }
 
-  /* voltage legend */
-  .legend-line { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 3px 0; color: var(--text-2); }
-  .legend-line .stripe { width: 18px; height: 2px; }
+  /* basemap segmented */
+  .seg-bar { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; background: var(--panel-2); border-radius: 8px; padding: 3px; gap: 2px; }
+  .seg-bar button { background: transparent; border: 0; padding: 6px 4px; font-size: 11px; color: var(--text-2); border-radius: 6px; cursor: pointer; font-family: inherit; transition: background .15s, color .15s; }
+  .seg-bar button.active { background: #fff; color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.06); font-weight: 600; }
 
-  /* active-filter chips */
-  .chips-wrap { display: flex; flex-wrap: wrap; gap: 6px; margin-top: -4px; }
-  .chip { display: inline-flex; align-items: center; gap: 6px; background: var(--accent-soft); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); border-radius: 999px; padding: 4px 8px 4px 10px; font-size: 11.5px; font-weight: 500; }
-  .chip .x { width: 14px; height: 14px; border-radius: 50%; background: color-mix(in srgb, var(--accent) 20%, transparent); display: grid; place-items: center; cursor: pointer; font-size: 10px; line-height: 1; color: var(--accent); }
-  .chip .x:hover { background: var(--accent); color: #fff; }
-  .chip-reset { margin-left: auto; background: transparent; border: 0; color: var(--muted); font-size: 11px; cursor: pointer; font-family: inherit; padding: 4px 6px; text-decoration: underline; text-underline-offset: 2px; }
-  .chip-reset:hover { color: var(--text); }
-  .chips-empty { color: var(--muted); font-size: 12px; font-style: italic; }
+  /* layer rows (used inside Map card) */
+  .row-list label { display: flex; align-items: center; justify-content: space-between; font-size: 13px; padding: 4px 0; cursor: pointer; color: var(--text-2); }
+  .row-list label input { accent-color: var(--accent); }
 
-  /* selected-plant detail card */
-  .selected-card { background: linear-gradient(180deg, var(--accent-soft) 0%, #fff 80%); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); border-radius: 12px; padding: 16px; position: relative; }
-  .selected-card .close { position: absolute; top: 10px; right: 10px; width: 22px; height: 22px; border-radius: 50%; border: 0; background: rgba(255,255,255,0.7); color: var(--text-2); cursor: pointer; font-size: 14px; line-height: 1; display: grid; place-items: center; }
-  .selected-card .close:hover { background: #fff; color: var(--text); }
-  .selected-card .fuel-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-2); margin-bottom: 6px; }
-  .selected-card .fuel-pill .dot { width: 8px; height: 8px; border-radius: 50%; }
-  .selected-card .nm { font-size: 18px; font-weight: 700; line-height: 1.25; margin-bottom: 10px; padding-right: 22px; letter-spacing: -0.2px; }
-  .selected-card .cap { font-size: 24px; font-weight: 700; color: var(--text); letter-spacing: -0.3px; }
-  .selected-card .cap span { font-size: 12px; color: var(--muted); margin-left: 4px; font-weight: 500; }
-  .selected-card .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; margin-top: 12px; font-size: 12px; }
-  .selected-card .meta .k { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; }
-  .selected-card .meta .v { color: var(--text); font-weight: 500; word-break: break-word; }
-  .selected-card .actions { display: flex; gap: 6px; margin-top: 14px; }
-  .selected-card .btn { flex: 1; background: #fff; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 6px; padding: 7px 8px; font-size: 12px; font-family: inherit; cursor: pointer; transition: background .15s; }
-  .selected-card .btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
-
-  /* clickable rows */
-  .prov-clickable { cursor: pointer; padding: 4px 6px; margin: 0 -6px; border-radius: 6px; transition: background .12s; }
-  .prov-clickable:hover { background: var(--panel-2); }
-  .prov-clickable.is-active { background: var(--accent-soft); }
-
-  /* popup */
-  .maplibregl-popup-content { background: #fff !important; color: var(--text) !important; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 6px 16px rgba(20,30,50,.08); font-size: 12px; padding: 12px 14px; }
+  /* popup card content */
+  .maplibregl-popup-content { background: #fff !important; color: var(--text) !important; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 8px 24px rgba(20,30,50,.12); font-size: 12px; padding: 0 !important; max-width: 280px; }
   .maplibregl-popup-tip { border-top-color: #fff !important; border-bottom-color: #fff !important; }
-  .popup .name { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
-  .popup .row2 { color: var(--muted); margin-top: 2px; }
+  .maplibregl-popup-close-button { right: 6px !important; top: 4px !important; font-size: 18px !important; color: var(--muted) !important; padding: 0 6px !important; }
+  .maplibregl-popup-close-button:hover { background: transparent !important; color: var(--text) !important; }
+  .pcard { padding: 14px 16px 16px; }
+  .pcard .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-2); margin-bottom: 6px; }
+  .pcard .pill .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .pcard .nm { font-size: 16px; font-weight: 700; line-height: 1.25; margin-bottom: 8px; padding-right: 18px; letter-spacing: -0.2px; }
+  .pcard .cap { font-size: 22px; font-weight: 700; color: var(--text); letter-spacing: -0.3px; }
+  .pcard .cap span { font-size: 12px; color: var(--muted); margin-left: 4px; font-weight: 500; }
+  .pcard .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; margin-top: 10px; font-size: 12px; }
+  .pcard .meta .k { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; }
+  .pcard .meta .v { color: var(--text); font-weight: 500; word-break: break-word; }
+  .pcard .actions { display: flex; gap: 6px; margin-top: 12px; }
+  .pcard .btn { flex: 1; background: #fff; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 6px; padding: 6px 8px; font-size: 11.5px; font-family: inherit; cursor: pointer; transition: background .15s; }
+  .pcard .btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
 
-  @media (max-width: 900px) { #app { grid-template-columns: 1fr; } .panel { max-height: 50vh; } }
+  .screen-form { display: grid; gap: 10px; }
+  .screen-form .field { display: flex; flex-direction: column; gap: 4px; }
+  .screen-form .field > label { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; }
+  .screen-form input[type=text], .screen-form input[type=number], .screen-form select {
+    width: 100%; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font-size: 12px; font-family: inherit; color: var(--text);
+  }
+  .screen-form input:focus, .screen-form select:focus { outline: none; border-color: var(--accent); background: #fff; }
+  .screen-form .range-row { display: grid; grid-template-columns: 1fr auto 1fr; gap: 6px; align-items: center; }
+  .screen-form .range-row span { color: var(--muted); font-size: 11px; }
+  .screen-form .multi-pills { display: flex; flex-wrap: wrap; gap: 4px; }
+  .screen-form .multi-pills button { background: var(--panel-2); color: var(--text-2); border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px; font-size: 11px; font-family: inherit; cursor: pointer; transition: all .12s; }
+  .screen-form .multi-pills button.on { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 500; }
+  .screen-row { display: grid; grid-template-columns: 10px 1fr auto; gap: 8px; align-items: center; padding: 8px 10px; border-bottom: 1px solid var(--line-2); cursor: pointer; font-size: 12px; }
+  .screen-row:last-child { border-bottom: 0; }
+  .screen-row:hover { background: var(--panel-2); }
+  .screen-row .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .screen-row .nm { color: var(--text); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .screen-row .nm small { display: block; color: var(--muted); font-weight: 400; font-size: 10.5px; }
+  .screen-row .mw { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; font-size: 11.5px; }
+  .screen-empty { padding: 14px; color: var(--muted); font-style: italic; font-size: 12px; text-align: center; }
+
+  /* context drawer */
+  #ctx { position: absolute; right: 12px; top: 12px; width: 340px; max-height: calc(100% - 24px); background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 32px rgba(20,30,50,.14); display: none; flex-direction: column; overflow: hidden; z-index: 5; }
+  #ctx.open { display: flex; }
+  .ctx-head { padding: 14px 16px 12px; border-bottom: 1px solid var(--line-2); position: relative; }
+  .ctx-head .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-2); margin-bottom: 6px; }
+  .ctx-head .pill .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .ctx-head .nm { font-size: 16px; font-weight: 700; line-height: 1.25; padding-right: 22px; letter-spacing: -0.2px; }
+  .ctx-head .cap { margin-top: 6px; font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
+  .ctx-head .cap span { font-size: 12px; color: var(--muted); margin-left: 4px; font-weight: 500; }
+  .ctx-close { position: absolute; right: 10px; top: 10px; width: 22px; height: 22px; border-radius: 6px; border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 16px; line-height: 1; }
+  .ctx-close:hover { background: var(--panel-2); color: var(--text); }
+  .ctx-body { padding: 4px 16px 14px; overflow-y: auto; }
+  .ctx-body section { padding: 12px 0; border-bottom: 1px solid var(--line-2); }
+  .ctx-body section:last-child { border-bottom: 0; }
+  .ctx-body h3 { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--accent); margin: 0 0 8px; }
+  .ctx-body .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; font-size: 12px; }
+  .ctx-body .meta .k { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; }
+  .ctx-body .meta .v { color: var(--text); font-weight: 500; word-break: break-word; }
+  .ctx-line { display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px; color: var(--text-2); border-bottom: 1px dotted var(--line); transition: color .12s; }
+  .ctx-peer:hover { color: var(--accent); }
+  .ctx-line:last-child { border-bottom: 0; }
+  .ctx-line b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .ctx-line .sw { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+  .ctx-actions { display: flex; gap: 6px; padding-top: 10px; }
+  .ctx-actions button { flex: 1; padding: 7px 8px; font-size: 11.5px; border-radius: 6px; cursor: pointer; font-family: inherit; border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); background: #fff; color: var(--accent); transition: all .12s; }
+  .ctx-actions button:hover { background: var(--accent); color: #fff; }
+  .ctx-empty { color: var(--muted); font-style: italic; font-size: 12px; }
+  #map-wrap { position: relative; height: 100%; }
+
+  @media (max-width: 900px) { #app { grid-template-columns: 1fr; } .panel { max-height: 50vh; } #ctx { width: auto; left: 12px; right: 12px; } }
 </style>
 </head>
 <body>
 
-<svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <defs>
-    <symbol id="i-hydro" viewBox="0 0 24 24"><path d="M3 13c2 0 2-2 4.5-2S10 13 12 13s2-2 4.5-2S19 13 21 13"/><path d="M3 18c2 0 2-2 4.5-2S10 18 12 18s2-2 4.5-2S19 18 21 18"/><path d="M3 8c2 0 2-2 4.5-2S10 8 12 8s2-2 4.5-2S19 8 21 8"/></symbol>
-    <symbol id="i-solar" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/></symbol>
-    <symbol id="i-wind" viewBox="0 0 24 24"><path d="M3 8h11a3 3 0 1 0-3-3"/><path d="M3 12h17a3 3 0 1 1-3 3"/><path d="M3 16h9"/></symbol>
-    <symbol id="i-gas" viewBox="0 0 24 24"><path d="M12 3s5 5 5 10a5 5 0 0 1-10 0c0-3 2-5 2-7s3-3 3-3z"/><path d="M12 14s2 1 2 3a2 2 0 1 1-4 0c0-1 .5-1.5 1-2"/></symbol>
-    <symbol id="i-coal" viewBox="0 0 24 24"><path d="M3 19h18"/><path d="M5 19V9l4-3 4 3v10"/><path d="M13 19v-6h6v6"/><path d="M16 13V9"/></symbol>
-    <symbol id="i-oil" viewBox="0 0 24 24"><path d="M12 3s6 7 6 12a6 6 0 0 1-12 0c0-5 6-12 6-12z"/></symbol>
-    <symbol id="i-biomass" viewBox="0 0 24 24"><path d="M5 20c0-7 5-13 14-13 0 9-6 14-14 13z"/><path d="M5 20l7-7"/></symbol>
-  </defs>
-</svg>
-
 <div id="app">
   <aside class="panel">
-    <div class="section header">
+    <div class="header">
       <h1>Vietnam Energy Atlas</h1>
-      <p>Operating power plants, transmission lines, and substations across Vietnam. Filter by fuel and capacity to explore the grid.</p>
+      <div class="search-row">
+        <div class="search">
+          <input id="search" type="search" autocomplete="off" placeholder="Search plant by name, or open filters" />
+        </div>
+        <button class="filter-toggle" id="filter-toggle" type="button" aria-label="Toggle filters" title="Filters">
+          <svg viewBox="0 0 24 24"><path d="M3 6h18M6 12h12M10 18h4"/></svg>
+          <span class="badge" id="filter-badge">0</span>
+        </button>
+      </div>
+      <div class="search-panel" id="search-panel">
+        <div class="form-wrap">
+          <div class="screen-form">
+            <div class="field"><label>Fuel</label><div class="multi-pills" id="screen-fuels"></div></div>
+            <div class="field"><label>Capacity (MW)</label>
+              <div class="range-row">
+                <input id="screen-cap-min" type="number" inputmode="numeric" placeholder="min">
+                <span>–</span>
+                <input id="screen-cap-max" type="number" inputmode="numeric" placeholder="max">
+              </div>
+            </div>
+            <div class="field"><label>COD year</label>
+              <div class="range-row">
+                <input id="screen-cod-min" type="number" inputmode="numeric" placeholder="from">
+                <span>–</span>
+                <input id="screen-cod-max" type="number" inputmode="numeric" placeholder="to">
+              </div>
+            </div>
+            <div class="field"><label>Status</label>
+              <select id="screen-status"><option value="">Any</option></select>
+            </div>
+            <div class="field"><label>Province</label>
+              <select id="screen-prov"><option value="">Any</option></select>
+            </div>
+            <div class="field"><label>Owner contains</label>
+              <input id="screen-owner" type="text" placeholder="e.g. EVN, TTC, Vingroup">
+            </div>
+          </div>
+        </div>
+        <div class="search-meta" id="search-meta">
+          <span><b id="search-count">0</b> matches</span>
+          <div class="actions">
+            <button id="search-clear">Clear</button>
+            <button id="search-export" class="primary">Export CSV</button>
+          </div>
+        </div>
+        <div class="search-list" id="search-list"></div>
+      </div>
     </div>
 
-    <div class="section" id="selected-section" style="display:none">
-      <div class="selected-card" id="selected-card"></div>
-    </div>
-
-    <div class="section" id="chips-section" style="display:none">
-      <div style="display:flex;align-items:center;margin-bottom:8px">
-        <h2 style="margin:0;border:0;padding:0">Active filters</h2>
-        <button class="chip-reset" id="chip-reset">Reset all</button>
+    <!-- Plants card -->
+    <section class="card" id="card-plants" data-active="true">
+      <div class="card-head" data-target="plants">
+        <input class="tgl" type="checkbox" id="lyr-plants" checked />
+        <h2>Plants</h2>
+        <span class="stats"><b id="plants-count">—</b> · <b id="plants-cap">—</b><span style="color:var(--muted);font-weight:500"> MW</span></span>
       </div>
-      <div class="chips-wrap" id="chips"></div>
-    </div>
-
-    <div class="group">
-      <div class="group-head"><h2>Plants</h2><span class="subtle">within current filters</span></div>
-
-      <div class="stat-row">
-        <div class="stat"><div class="l">Plants</div><div class="v" id="m-count">—</div></div>
-        <div class="stat"><div class="l">Capacity</div><div class="v" id="m-cap">—<span class="u"> MW</span></div></div>
-      </div>
-
-      <div>
-        <div class="mix-bar" id="mix-bar"></div>
-        <div class="mix-legend" id="mix-legend"></div>
-      </div>
-
-      <div class="section" style="border:0;padding:0;margin:0">
-        <h2>Filter by fuel</h2>
-        <div class="tile-grid" id="fuel-tiles"></div>
-      </div>
-
-      <div class="section" style="border:0;padding:0;margin:0">
-        <h2>Filter by capacity</h2>
-        <div class="slider-wrap">
-          <div class="slider-head"><span>Minimum</span><span><b id="cap-min-label">0</b><span class="u"> MW</span></span></div>
+      <div class="card-body">
+        <div>
+          <div class="body-label" style="margin-bottom:6px">Color by</div>
+          <div class="seg-bar" id="color-by-seg" style="grid-template-columns:repeat(4,1fr)">
+            <button data-cb="fuel" class="active">Fuel</button>
+            <button data-cb="owner">Owner</button>
+            <button data-cb="status">Status</button>
+            <button data-cb="capacity">Capacity</button>
+          </div>
+        </div>
+        <div>
+          <div class="mix-bar" id="plants-mix-bar"></div>
+          <div class="mix-legend" id="plants-mix-legend"></div>
+        </div>
+        <div>
+          <div class="slider-head"><span>Min capacity</span><span><b id="cap-min-label">0</b><span style="color:var(--muted)"> MW</span></span></div>
           <div class="histo" id="cap-histo"></div>
           <input type="range" id="cap-min" min="0" max="4000" value="0" step="10">
         </div>
       </div>
-    </div>
+    </section>
 
-    <div class="group">
-      <div class="group-head"><h2>Grid</h2><span class="subtle">transmission &amp; substations</span></div>
-
-      <div class="stat-row">
-        <div class="stat"><div class="l">Lines</div><div class="v" id="g-lines">—</div></div>
-        <div class="stat"><div class="l">Length</div><div class="v" id="g-km">—<span class="u"> km</span></div></div>
+    <!-- Transmission card -->
+    <section class="card" id="card-transmission" data-active="true">
+      <div class="card-head" data-target="transmission">
+        <input class="tgl" type="checkbox" id="lyr-transmission" checked />
+        <h2>Transmission</h2>
+        <span class="stats"><b id="tx-count">—</b> · <b id="tx-km">—</b><span style="color:var(--muted);font-weight:500"> km</span></span>
       </div>
-
-      <div>
-        <div class="mix-bar" id="grid-mix-bar"></div>
-        <div class="mix-legend" id="grid-mix-legend"></div>
-      </div>
-
-      <div class="section" style="border:0;padding:0;margin:0">
-        <h2>Substations by voltage</h2>
-        <div id="sub-bars"></div>
-      </div>
-    </div>
-
-    <div class="group">
-      <div class="group-head"><h2>Province</h2><span class="subtle">browse or filter</span></div>
-
-      <select id="province-filter"><option value="">All provinces</option></select>
-
-      <div class="section" style="border:0;padding:0;margin:0">
-        <h2>Top by capacity</h2>
-        <div id="province-bars"></div>
-      </div>
-    </div>
-
-    <div class="group">
-      <div class="group-head"><h2>Layer control</h2></div>
-
-      <div class="row-list">
-        <label><span>Power plants</span><input type="checkbox" id="lyr-plants" checked></label>
-        <label><span>Transmission lines</span><input type="checkbox" id="lyr-transmission" checked></label>
-        <label><span>Substations</span><input type="checkbox" id="lyr-substations"></label>
-        <label><span>Province boundaries</span><input type="checkbox" id="lyr-provinces" checked></label>
-      </div>
-
-      <div class="section" style="border:0;padding:0;margin:0">
-        <h2>Transmission voltage</h2>
-        <div id="voltage-legend"></div>
-      </div>
-
-      <div class="section" style="border:0;padding:0;margin:0">
-        <h2>Basemap</h2>
-        <div class="seg" id="basemap-seg">
-          <button data-basemap="light"     class="active">Light</button>
-          <button data-basemap="voyager">Streets</button>
-          <button data-basemap="dark">Dark</button>
-          <button data-basemap="satellite">Satellite</button>
+      <div class="card-body">
+        <div>
+          <div class="mix-bar" id="tx-mix-bar"></div>
+          <div class="mix-legend" id="tx-mix-legend"></div>
         </div>
       </div>
-    </div>
+    </section>
+
+    <!-- Substations card -->
+    <section class="card" id="card-substations" data-active="false">
+      <div class="card-head" data-target="substations">
+        <input class="tgl" type="checkbox" id="lyr-substations" />
+        <h2>Substations</h2>
+        <span class="stats"><b id="ss-count">—</b></span>
+      </div>
+      <div class="card-body">
+        <div id="ss-rows"></div>
+      </div>
+    </section>
+
+    <!-- Map card -->
+    <section class="card" id="card-map" data-active="true">
+      <div class="card-head"><h2>Map</h2></div>
+      <div class="card-body">
+        <div class="row-list">
+          <label><span>Province boundaries</span><input type="checkbox" id="lyr-provinces" checked></label>
+        </div>
+        <div>
+          <div class="body-label" style="margin-bottom:8px">Basemap</div>
+          <div class="seg-bar" id="basemap-seg">
+            <button data-basemap="light" class="active">Light</button>
+            <button data-basemap="voyager">Streets</button>
+            <button data-basemap="dark">Dark</button>
+            <button data-basemap="satellite">Satellite</button>
+          </div>
+        </div>
+      </div>
+    </section>
   </aside>
 
-  <div id="map"></div>
+  <div id="map-wrap">
+    <div id="map"></div>
+    <aside id="ctx" aria-hidden="true">
+      <div class="ctx-head">
+        <button class="ctx-close" id="ctx-close" aria-label="Close">×</button>
+        <div class="pill"><span class="dot" id="ctx-dot"></span><span id="ctx-fuel">—</span></div>
+        <div class="nm" id="ctx-nm">—</div>
+        <div class="cap" id="ctx-cap">—<span>MW</span></div>
+      </div>
+      <div class="ctx-body" id="ctx-body"></div>
+    </aside>
+  </div>
 </div>
 
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
 }
-maplibregl.addProtocol('pmtiles', new pmtiles.Protocol().tile);
+
 const FUELS = [
-  { id: 'Hydro',   icon: 'i-hydro',   color: '#1e88e5' },
-  { id: 'Solar',   icon: 'i-solar',   color: '#f5b400' },
-  { id: 'Wind',    icon: 'i-wind',    color: '#43a047' },
-  { id: 'Gas',     icon: 'i-gas',     color: '#fb8c00' },
-  { id: 'Coal',    icon: 'i-coal',    color: '#546e7a' },
-  { id: 'Oil',     icon: 'i-oil',     color: '#c62828' },
-  { id: 'Biomass', icon: 'i-biomass', color: '#8d6e63' },
+  { id: 'Hydro',   color: '#1e88e5' },
+  { id: 'Solar',   color: '#f5b400' },
+  { id: 'Wind',    color: '#43a047' },
+  { id: 'Gas',     color: '#fb8c00' },
+  { id: 'Coal',    color: '#546e7a' },
+  { id: 'Oil',     color: '#c62828' },
+  { id: 'Biomass', color: '#8d6e63' },
 ];
 const FUEL_COLORS = Object.fromEntries(FUELS.map(f => [f.id, f.color]));
 const FUEL_ORDER = FUELS.map(f => f.id);
 
+const VOLTAGE_BANDS = [
+  { label: '≥ 500 kV', color: '#d32f2f', test: v => v >= 500 },
+  { label: '220 kV',   color: '#f57c00', test: v => v >= 220 && v < 500 },
+  { label: '110 kV',   color: '#fbc02d', test: v => v >= 110 && v < 220 },
+  { label: '35–66 kV', color: '#43a047', test: v => v >= 35 && v < 110 },
+  { label: '< 35 kV',  color: '#9aa4b2', test: v => v > 0 && v < 35 },
+  { label: 'Unknown',  color: '#cdd5df', test: v => !v },
+];
+
+const CARTO_SUBS = ['a', 'b', 'c', 'd'];
+const carto = path => CARTO_SUBS.map(s => `https://${s}.basemaps.cartocdn.com/${path}`);
+
 const BASEMAPS = {
   light: {
-    bg: ['https://a.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}@2x.png'],
-    labels: ['https://a.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}@2x.png'],
-    provLine: '#9aa4b2',
+    bg: carto('light_all/{z}/{x}/{y}.png'),
+    labels: null, provLine: '#9aa4b2',
   },
   voyager: {
-    bg: ['https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png'],
-    labels: null,
-    provLine: '#6f7a86',
+    bg: carto('rastertiles/voyager/{z}/{x}/{y}.png'),
+    labels: null, provLine: '#6f7a86',
   },
   dark: {
-    bg: ['https://a.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}@2x.png'],
-    labels: ['https://a.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}@2x.png'],
-    provLine: '#3a4250',
+    bg: carto('dark_all/{z}/{x}/{y}.png'),
+    labels: null, provLine: '#3a4250',
   },
   satellite: {
     bg: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
-    labels: ['https://a.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}@2x.png'],
+    labels: carto('dark_only_labels/{z}/{x}/{y}.png'),
     provLine: '#cdd5df',
   },
 };
 
-const VOLTAGE_BANDS = [
-  { color: '#d32f2f', label: '≥ 500 kV' },
-  { color: '#f57c00', label: '220 kV' },
-  { color: '#fbc02d', label: '110 kV' },
-  { color: '#43a047', label: '35–66 kV' },
-  { color: '#9aa4b2', label: '< 35 kV' },
-];
+const STATUS_PALETTE = {
+  operating: '#43a047', construction: '#fb8c00', pipeline: '#1e88e5',
+  decommissioned: '#9aa4b2', planned: '#7e57c2', proposed: '#7e57c2',
+};
+const STATUS_FALLBACK = '#cdd5df';
 
-function voltageColorExpr() {
-  return [
-    'case',
-    ['>=', ['coalesce', ['to-number', ['get', 'voltage_kv']], 0], 500], '#d32f2f',
-    ['>=', ['coalesce', ['to-number', ['get', 'voltage_kv']], 0], 220], '#f57c00',
-    ['>=', ['coalesce', ['to-number', ['get', 'voltage_kv']], 0], 110], '#fbc02d',
-    ['>=', ['coalesce', ['to-number', ['get', 'voltage_kv']], 0],  35], '#43a047',
-    '#9aa4b2',
-  ];
-}
+const CAP_BINS = [
+  { label: '< 50 MW',    min: 0,   max: 50,       color: '#cbe2f3' },
+  { label: '50–200 MW',  min: 50,  max: 200,      color: '#7cb6e2' },
+  { label: '200–500 MW', min: 200, max: 500,      color: '#3b8dcf' },
+  { label: '≥ 500 MW',   min: 500, max: Infinity, color: '#0a5fa3' },
+];
+const OWNER_PALETTE_COLORS = ['#1e88e5','#f5b400','#43a047','#fb8c00','#546e7a','#c62828','#8d6e63','#7e57c2'];
+const OWNER_OTHER = 'Other', OWNER_NONE = '— Unknown';
+let ownerColor = {}; // owner string → hex (only top-N), built from data
 
 const state = {
-  fuels: new Set(FUEL_ORDER),
+  colorBy: 'fuel',
+  cats: new Set(), // empty = all visible; else solo-set of category labels in current colorBy
   capMin: 0,
-  province: '',
+  voltBandTx: null,
+  voltBandSs: null,
   selectedId: null,
-  voltBand: null,   // null = all voltages; otherwise a band label
-  data: { plants: null, grid: null },
+  data: { plants: null, transmission: null, substations: null, provinces: null },
 };
 
-// Voltage band predicates — must match the Python build script
-const BAND_RANGES = {
-  '≥ 500 kV': [500, Infinity],
-  '220 kV':   [220, 500],
-  '110 kV':   [110, 220],
-  '35–66 kV': [35, 110],
-  '< 35 kV':  [0.0001, 35],   // strictly > 0
-  'Unknown':  [0, 0.0001],    // exactly 0 / null
-};
+function classifyVolt(v) {
+  for (const b of VOLTAGE_BANDS) if (b.test(+v || 0)) return b.label;
+}
+const fmtMW = v => v >= 1000 ? (v/1000).toFixed(1).replace(/\.0$/,'') + 'k' : Math.round(v).toLocaleString();
+const fetchJSON = url => fetch(url, { cache: 'force-cache' }).then(r => r.json());
 
 const map = new maplibregl.Map({
   container: 'map',
   style: {
     version: 8,
     sources: {
-      'basemap-bg': { type: 'raster', tiles: BASEMAPS.light.bg, tileSize: 256, attribution: '© OpenStreetMap, © CARTO, Esri' },
-      'basemap-labels': { type: 'raster', tiles: BASEMAPS.light.labels, tileSize: 256 },
+      'basemap-bg': { type: 'raster', tiles: BASEMAPS.light.bg, tileSize: 256, maxzoom: 19, attribution: '© OpenStreetMap, © CARTO, Esri' },
+      'basemap-labels': { type: 'raster', tiles: BASEMAPS.satellite.labels, tileSize: 256, maxzoom: 19 },
     },
     layers: [
       { id: 'bg', type: 'raster', source: 'basemap-bg' },
-      { id: 'labels', type: 'raster', source: 'basemap-labels' },
+      { id: 'labels', type: 'raster', source: 'basemap-labels', layout: { visibility: 'none' } },
     ],
   },
   center: [107.5, 16.0],
@@ -362,32 +426,171 @@ const map = new maplibregl.Map({
 map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
 map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left');
 
-const fetchJSON = url => fetch(url, { cache: 'force-cache' }).then(r => r.json());
+function voltageColorExpr() {
+  return [
+    'case',
+    ['>=', ['coalesce', ['to-number', ['get', 'voltage_kv']], 0], 500], '#d32f2f',
+    ['>=', ['coalesce', ['to-number', ['get', 'voltage_kv']], 0], 220], '#f57c00',
+    ['>=', ['coalesce', ['to-number', ['get', 'voltage_kv']], 0], 110], '#fbc02d',
+    ['>=', ['coalesce', ['to-number', ['get', 'voltage_kv']], 0],  35], '#43a047',
+    ['>',  ['coalesce', ['to-number', ['get', 'voltage_kv']], 0],   0], '#9aa4b2',
+    '#cdd5df',
+  ];
+}
+
+/* -------- plant color-by helpers -------- */
+function buildOwnerPalette(plants) {
+  const mw = {};
+  for (const f of plants) {
+    const o = (f.properties.owner || '').trim();
+    if (!o) continue;
+    mw[o] = (mw[o] || 0) + (+f.properties.capacity_mw || 0);
+  }
+  const top = Object.entries(mw).sort((a,b) => b[1] - a[1]).slice(0, OWNER_PALETTE_COLORS.length);
+  ownerColor = {};
+  top.forEach(([o], i) => { ownerColor[o] = OWNER_PALETTE_COLORS[i]; });
+}
+
+function categoryFor(f, mode) {
+  const p = f.properties;
+  if (mode === 'fuel')   return p.fuel_type || 'Unknown';
+  if (mode === 'status') return (p.status || '').trim() || 'Unknown';
+  if (mode === 'capacity') {
+    const mw = +p.capacity_mw || 0;
+    for (const b of CAP_BINS) if (mw >= b.min && mw < b.max) return b.label;
+    return CAP_BINS[CAP_BINS.length - 1].label;
+  }
+  if (mode === 'owner') {
+    const o = (p.owner || '').trim();
+    if (!o) return OWNER_NONE;
+    return ownerColor[o] ? o : OWNER_OTHER;
+  }
+}
+
+function colorFor(cat, mode) {
+  if (mode === 'fuel')   return FUEL_COLORS[cat] || '#9aa4b2';
+  if (mode === 'status') return STATUS_PALETTE[(cat || '').toLowerCase()] || STATUS_FALLBACK;
+  if (mode === 'capacity') return (CAP_BINS.find(b => b.label === cat) || CAP_BINS[0]).color;
+  if (mode === 'owner') {
+    if (cat === OWNER_NONE)  return '#e6e8ec';
+    if (cat === OWNER_OTHER) return '#cdd5df';
+    return ownerColor[cat] || '#cdd5df';
+  }
+}
+
+function colorExprFor(mode) {
+  if (mode === 'fuel') {
+    const e = ['match', ['get', 'fuel_type']];
+    for (const f of FUELS) e.push(f.id, f.color);
+    e.push('#9aa4b2');
+    return e;
+  }
+  if (mode === 'status') {
+    // case-insensitive match on a small set
+    const lower = ['downcase', ['coalesce', ['get', 'status'], '']];
+    const e = ['match', lower];
+    for (const [k, v] of Object.entries(STATUS_PALETTE)) e.push(k, v);
+    e.push(STATUS_FALLBACK);
+    return e;
+  }
+  if (mode === 'capacity') {
+    const cap = ['coalesce', ['get', 'capacity_mw'], 0];
+    return ['step', cap, CAP_BINS[0].color, ...CAP_BINS.slice(1).flatMap(b => [b.min, b.color])];
+  }
+  if (mode === 'owner') {
+    const named = Object.keys(ownerColor);
+    if (!named.length) return '#cdd5df';
+    const e = ['match', ['coalesce', ['get', 'owner'], '']];
+    for (const o of named) e.push(o, ownerColor[o]);
+    e.push('#cdd5df');
+    // wrap so empty owner gets a softer gray
+    return ['case', ['any', ['!', ['has', 'owner']], ['==', ['coalesce', ['get', 'owner'], ''], '']],
+      '#e6e8ec', e];
+  }
+}
+
+function orderedCatsFor(mode, byCat) {
+  if (mode === 'fuel')     return [...FUEL_ORDER, 'Unknown'].filter(c => byCat.has(c));
+  if (mode === 'capacity') return CAP_BINS.map(b => b.label).filter(c => byCat.has(c));
+  if (mode === 'status') {
+    const order = ['operating', 'construction', 'pipeline', 'planned', 'proposed', 'decommissioned', 'Unknown'];
+    return order.filter(c => byCat.has(c)).concat([...byCat.keys()].filter(c => !order.includes(c)));
+  }
+  if (mode === 'owner') {
+    const named = Object.keys(ownerColor).filter(c => byCat.has(c));
+    named.sort((a, b) => byCat.get(b) - byCat.get(a));
+    const tail = [];
+    if (byCat.has(OWNER_OTHER)) tail.push(OWNER_OTHER);
+    if (byCat.has(OWNER_NONE))  tail.push(OWNER_NONE);
+    return [...named, ...tail];
+  }
+}
+
+function catFilterFor(cats, mode) {
+  if (!cats.size) return null;
+  const arr = [...cats];
+  if (mode === 'fuel') return ['in', ['coalesce', ['get', 'fuel_type'], 'Unknown'], ['literal', arr]];
+  if (mode === 'status') {
+    const lower = ['downcase', ['coalesce', ['get', 'status'], 'Unknown']];
+    return ['in', lower, ['literal', arr.map(s => s.toLowerCase())]];
+  }
+  if (mode === 'capacity') {
+    const cap = ['coalesce', ['get', 'capacity_mw'], 0];
+    const ranges = arr.map(label => {
+      const b = CAP_BINS.find(x => x.label === label);
+      if (!b) return ['literal', false];
+      const max = b.max === Infinity ? null : b.max;
+      return max == null ? ['>=', cap, b.min] : ['all', ['>=', cap, b.min], ['<', cap, max]];
+    });
+    return ranges.length === 1 ? ranges[0] : ['any', ...ranges];
+  }
+  if (mode === 'owner') {
+    const owner = ['coalesce', ['get', 'owner'], ''];
+    const named = arr.filter(c => c !== OWNER_OTHER && c !== OWNER_NONE);
+    const branches = [];
+    if (named.length) branches.push(['in', owner, ['literal', named]]);
+    if (arr.includes(OWNER_OTHER)) {
+      // owner present but not in palette
+      branches.push(['all', ['!=', owner, ''], ['!', ['in', owner, ['literal', Object.keys(ownerColor)]]]]);
+    }
+    if (arr.includes(OWNER_NONE)) branches.push(['==', owner, '']);
+    if (!branches.length) return ['literal', false];
+    return branches.length === 1 ? branches[0] : ['any', ...branches];
+  }
+}
 
 map.on('load', async () => {
-  // Tier 1: critical for first paint — small, fast
-  const [plants, provinces, grid] = await Promise.all([
+  const [plants, provinces, transmission, substations] = await Promise.all([
     fetchJSON('data/plants.geojson'),
     fetchJSON('data/provinces.geojson'),
-    fetchJSON('data/grid_stats.json'),
+    fetchJSON('data/transmission.geojson'),
+    fetchJSON('data/substations.geojson'),
   ]);
   state.data.plants = plants;
-  state.data.grid = grid;
+  state.data.transmission = transmission;
+  state.data.substations = substations;
+  state.data.provinces = provinces;
+
+  // Pre-compute transmission length per feature (km, rough — equirectangular at lat 16°)
+  for (const f of transmission.features) {
+    f.properties._km = lineKm(f.geometry);
+    f.properties._band = classifyVolt(f.properties.voltage_kv);
+  }
+  for (const f of substations.features) {
+    f.properties._band = classifyVolt(f.properties.voltage_kv);
+  }
 
   map.addSource('plants', { type: 'geojson', data: plants, generateId: true });
   map.addSource('provinces', { type: 'geojson', data: provinces });
-  // Vector tiles (PMTiles) — served via jsDelivr because GitHub Pages
-  // doesn't honor HTTP Range requests, which PMTiles requires.
-  const PMT = 'https://cdn.jsdelivr.net/gh/lqtue/vn-energy-dashboard@main/data';
-  map.addSource('transmission', { type: 'vector', url: `pmtiles://${PMT}/transmission.pmtiles` });
-  map.addSource('substations',  { type: 'vector', url: `pmtiles://${PMT}/substations.pmtiles` });
+  map.addSource('transmission', { type: 'geojson', data: transmission });
+  map.addSource('substations', { type: 'geojson', data: substations });
 
   map.addLayer({ id: 'provinces-fill', type: 'fill', source: 'provinces',
     paint: { 'fill-color': '#1e88e5', 'fill-opacity': 0.03 } }, 'labels');
   map.addLayer({ id: 'provinces-line', type: 'line', source: 'provinces',
     paint: { 'line-color': '#9aa4b2', 'line-width': 0.6 } }, 'labels');
 
-  map.addLayer({ id: 'transmission-line', type: 'line', source: 'transmission', 'source-layer': 'transmission',
+  map.addLayer({ id: 'transmission-line', type: 'line', source: 'transmission',
     paint: {
       'line-color': voltageColorExpr(),
       'line-width': ['interpolate', ['linear'], ['coalesce', ['to-number', ['get', 'voltage_kv']], 0], 0, 0.4, 110, 0.9, 220, 1.4, 500, 2.2],
@@ -395,7 +598,7 @@ map.on('load', async () => {
     },
   }, 'labels');
 
-  map.addLayer({ id: 'substations-circle', type: 'circle', source: 'substations', 'source-layer': 'substations',
+  map.addLayer({ id: 'substations-circle', type: 'circle', source: 'substations',
     paint: {
       'circle-radius': ['interpolate', ['linear'], ['coalesce', ['to-number', ['get', 'voltage_kv']], 0], 0, 2, 220, 3.5, 500, 5],
       'circle-color': voltageColorExpr(),
@@ -406,147 +609,126 @@ map.on('load', async () => {
     layout: { visibility: 'none' },
   }, 'labels');
 
-  const fuelMatch = ['match', ['get', 'fuel_type']];
-  for (const f of FUELS) fuelMatch.push(f.id, f.color);
-  fuelMatch.push('#9aa4b2');
+  buildOwnerPalette(plants.features);
+
+  const radius = ['interpolate', ['linear'], ['coalesce', ['get', 'capacity_mw'], 0], 0, 3, 100, 5, 500, 9, 1500, 14, 4000, 22];
   map.addLayer({ id: 'plants-circle', type: 'circle', source: 'plants',
     paint: {
-      'circle-radius': ['interpolate', ['linear'], ['coalesce', ['get', 'capacity_mw'], 0], 0, 3, 100, 5, 500, 9, 1500, 14, 4000, 22],
-      'circle-color': fuelMatch,
+      'circle-radius': radius,
+      'circle-color': colorExprFor(state.colorBy),
       'circle-stroke-color': '#ffffff',
       'circle-stroke-width': 1.2,
       'circle-opacity': 0.92,
     },
   }, 'labels');
 
+  map.addLayer({ id: 'plants-owner-highlight', type: 'circle', source: 'plants',
+    filter: ['==', ['get', 'owner'], '__none__'],
+    paint: {
+      'circle-radius': ['+', radius, 3],
+      'circle-color': 'transparent',
+      'circle-stroke-color': '#1e88e5',
+      'circle-stroke-width': 1.4,
+      'circle-stroke-opacity': 0.55,
+    },
+  }, 'labels');
+
   map.addLayer({ id: 'plants-selected', type: 'circle', source: 'plants',
     filter: ['==', ['get', 'id'], '__none__'],
     paint: {
-      'circle-radius': ['+', ['interpolate', ['linear'], ['coalesce', ['get', 'capacity_mw'], 0], 0, 3, 100, 5, 500, 9, 1500, 14, 4000, 22], 4],
+      'circle-radius': ['+', radius, 4],
       'circle-color': 'transparent',
       'circle-stroke-color': '#1e88e5',
       'circle-stroke-width': 2.5,
     },
   }, 'labels');
 
-  buildFuelTiles();
-  buildProvinceSelect(plants);
-  buildVoltageLegend();
   setupCapSlider(plants);
-  wireLayerToggles();
+  wireCardToggles();
   wireBasemapButtons();
-  attachPopups();
-  document.getElementById('chip-reset').addEventListener('click', resetAllFilters);
-  applyFilters();
-  renderGridOverview();
+  wireColorBy();
+  attachMapClicks();
+  document.getElementById('lyr-provinces').addEventListener('change', e => {
+    const v = e.target.checked ? 'visible' : 'none';
+    map.setLayoutProperty('provinces-fill', 'visibility', v);
+    map.setLayoutProperty('provinces-line', 'visibility', v);
+  });
+  setupSearchScreen();
+  document.getElementById('ctx-close').addEventListener('click', clearSelection);
+  applyAll();
 });
 
-function buildFuelTiles() {
-  const root = document.getElementById('fuel-tiles');
-  root.innerHTML = '';
-  const counts = {};
-  if (state.data.plants) {
-    for (const f of state.data.plants.features) {
-      counts[f.properties.fuel_type] = (counts[f.properties.fuel_type] || 0) + 1;
+/* -------- length helper (equirectangular, km, lat 16°) -------- */
+function lineKm(geom) {
+  const segs = geom.type === 'MultiLineString' ? geom.coordinates : [geom.coordinates];
+  let km = 0;
+  for (const seg of segs) {
+    for (let i = 1; i < seg.length; i++) {
+      const [x1, y1] = seg[i - 1], [x2, y2] = seg[i];
+      const dx = (x2 - x1) * 111.32 * Math.cos((y1 + y2) / 2 * Math.PI / 180);
+      const dy = (y2 - y1) * 110.57;
+      km += Math.sqrt(dx * dx + dy * dy);
     }
   }
-  for (const f of FUELS) {
-    const el = document.createElement('div');
-    el.className = 'tile' + (state.fuels.has(f.id) ? ' active' : '');
-    el.dataset.fuel = f.id;
-    el.style.setProperty('--fc', f.color);
-    el.innerHTML = `
-      <div class="icon"><svg><use href="#${f.icon}"/></svg></div>
-      <div class="label">${f.id}</div>
-      <div class="count">${counts[f.id] || 0}</div>`;
-    el.addEventListener('click', () => {
-      if (state.fuels.has(f.id)) state.fuels.delete(f.id);
-      else state.fuels.add(f.id);
-      el.classList.toggle('active');
-      applyFilters();
-    });
-    root.appendChild(el);
-  }
+  return km;
 }
 
-function buildProvinceSelect(plants) {
-  const sel = document.getElementById('province-filter');
-  const provs = [...new Set(plants.features.map(f => f.properties.province).filter(Boolean))].sort();
-  for (const p of provs) {
-    const o = document.createElement('option');
-    o.value = p; o.textContent = p;
-    sel.appendChild(o);
-  }
-  sel.addEventListener('change', e => { state.province = e.target.value; applyFilters(); });
-}
-
-function buildVoltageLegend() {
-  const root = document.getElementById('voltage-legend');
-  root.innerHTML = '';
-  for (const b of VOLTAGE_BANDS) {
-    const el = document.createElement('div');
-    el.className = 'legend-line';
-    el.innerHTML = `<span class="stripe" style="background:${b.color}"></span>${b.label}`;
-    root.appendChild(el);
-  }
-}
-
-function setupCapSlider(plants) {
-  const caps = plants.features.map(f => +f.properties.capacity_mw || 0);
-  const max = Math.ceil(Math.max(...caps));
-  const slider = document.getElementById('cap-min');
-  slider.max = max;
-
-  // histogram (24 buckets, log-ish)
-  const N = 24;
-  const buckets = new Array(N).fill(0);
-  for (const c of caps) {
-    const idx = Math.min(N - 1, Math.floor((c / max) * N));
-    buckets[idx]++;
-  }
-  const histo = document.getElementById('cap-histo');
-  histo.innerHTML = '';
-  const hmax = Math.max(...buckets);
-  for (let i = 0; i < N; i++) {
-    const d = document.createElement('div');
-    d.className = 'bk';
-    d.style.height = `${(buckets[i] / hmax) * 100}%`;
-    d.dataset.idx = i;
-    histo.appendChild(d);
-  }
-
-  const updateHisto = () => {
-    const cutoff = (state.capMin / max) * N;
-    histo.querySelectorAll('.bk').forEach(d => {
-      d.classList.toggle('in', +d.dataset.idx >= cutoff);
-    });
+/* -------- card toggles -------- */
+function wireCardToggles() {
+  const map_ = {
+    'lyr-plants':       { card: 'card-plants',       layers: ['plants-circle'] },
+    'lyr-transmission': { card: 'card-transmission', layers: ['transmission-line'] },
+    'lyr-substations':  { card: 'card-substations',  layers: ['substations-circle'] },
   };
-
-  slider.addEventListener('input', e => {
-    state.capMin = +e.target.value;
-    document.getElementById('cap-min-label').textContent = state.capMin.toLocaleString();
-    updateHisto();
-    applyFilters();
-  });
-  updateHisto();
-}
-
-function wireLayerToggles() {
-  const m = {
-    'lyr-plants': ['plants-circle'],
-    'lyr-transmission': ['transmission-line'],
-    'lyr-substations': ['substations-circle'],
-    'lyr-provinces': ['provinces-fill', 'provinces-line'],
-  };
-  for (const [id, layers] of Object.entries(m)) {
-    document.getElementById(id).addEventListener('change', e => {
-      const v = e.target.checked ? 'visible' : 'none';
+  for (const [id, { card, layers }] of Object.entries(map_)) {
+    const cb = document.getElementById(id);
+    const setActive = on => {
+      document.getElementById(card).dataset.active = on ? 'true' : 'false';
+      const v = on ? 'visible' : 'none';
       layers.forEach(l => map.setLayoutProperty(l, 'visibility', v));
+    };
+    cb.addEventListener('change', e => { e.stopPropagation(); setActive(e.target.checked); });
+    // clicking the card head (but not on the checkbox or stats) toggles
+    document.querySelector(`#${card} .card-head`).addEventListener('click', e => {
+      if (e.target.tagName === 'INPUT') return;
+      cb.checked = !cb.checked;
+      setActive(cb.checked);
     });
   }
   map.setLayoutProperty('substations-circle', 'visibility', 'none');
 }
 
+/* -------- capacity slider -------- */
+function setupCapSlider(plants) {
+  const caps = plants.features.map(f => +f.properties.capacity_mw || 0);
+  const max = Math.ceil(Math.max(...caps));
+  const slider = document.getElementById('cap-min');
+  slider.max = max;
+  const N = 24;
+  const buckets = new Array(N).fill(0);
+  for (const c of caps) buckets[Math.min(N - 1, Math.floor((c / max) * N))]++;
+  const histo = document.getElementById('cap-histo');
+  histo.innerHTML = '';
+  const hmax = Math.max(...buckets);
+  for (let i = 0; i < N; i++) {
+    const d = document.createElement('div');
+    d.className = 'bk'; d.style.height = `${(buckets[i] / hmax) * 100}%`; d.dataset.idx = i;
+    histo.appendChild(d);
+  }
+  const updateHisto = () => {
+    const cutoff = (state.capMin / max) * N;
+    histo.querySelectorAll('.bk').forEach(d => d.classList.toggle('in', +d.dataset.idx >= cutoff));
+  };
+  slider.addEventListener('input', e => {
+    state.capMin = +e.target.value;
+    document.getElementById('cap-min-label').textContent = state.capMin.toLocaleString();
+    updateHisto();
+    applyAll();
+  });
+  updateHisto();
+}
+
+/* -------- basemap -------- */
 function wireBasemapButtons() {
   const seg = document.getElementById('basemap-seg');
   seg.addEventListener('click', e => {
@@ -566,15 +748,16 @@ function wireBasemapButtons() {
   });
 }
 
+/* -------- map clicks → popup for plant, popup for sub/line -------- */
 let activePopup = null;
-function attachPopups() {
+function attachMapClicks() {
   map.on('click', e => {
     const plant = map.queryRenderedFeatures(e.point, { layers: ['plants-circle'] })[0];
     if (plant) { selectPlant(plant); return; }
-    const line = map.queryRenderedFeatures(e.point, { layers: ['transmission-line'] })[0];
-    if (line) { showPopup(e.lngLat, lineHtml(line.properties)); return; }
     const sub = map.queryRenderedFeatures(e.point, { layers: ['substations-circle'] })[0];
     if (sub) { showPopup(e.lngLat, subHtml(sub.properties)); return; }
+    const line = map.queryRenderedFeatures(e.point, { layers: ['transmission-line'] })[0];
+    if (line) { showPopup(e.lngLat, lineHtml(line.properties)); return; }
     clearSelection();
   });
   for (const layer of ['plants-circle', 'transmission-line', 'substations-circle']) {
@@ -583,346 +766,607 @@ function attachPopups() {
   }
 }
 
-function showPopup(lngLat, html) {
+function showPopup(lngLat, html, opts = {}) {
   if (activePopup) activePopup.remove();
-  activePopup = new maplibregl.Popup({ closeButton: false, closeOnClick: true, offset: 10 })
+  activePopup = new maplibregl.Popup({ closeButton: opts.closeButton ?? false, closeOnClick: !opts.persistent, offset: 12, maxWidth: 'none' })
     .setLngLat(lngLat).setHTML(html).addTo(map);
+  return activePopup;
 }
 function lineHtml(p) {
-  return `<div class="popup"><div class="name">${p.name || 'Transmission line'}</div><div>${p.voltage_kv || '?'} kV · ${p.operator || ''}</div></div>`;
+  return `<div class="pcard"><div class="nm" style="font-size:14px">${p.name || 'Transmission line'}</div>
+          <div style="color:var(--text-2)">${p.voltage_kv || '—'} kV${p.operator ? ' · ' + p.operator : ''}</div></div>`;
 }
 function subHtml(p) {
-  return `<div class="popup"><div class="name">${p.name || 'Substation'}</div><div>${p.voltage_kv || '?'} kV${p.capacity_mva ? ' · ' + p.capacity_mva + ' MVA' : ''}</div><div class="row2">${p.operator || ''}</div></div>`;
+  return `<div class="pcard"><div class="nm" style="font-size:14px">${p.name || 'Substation'}</div>
+          <div style="color:var(--text-2)">${p.voltage_kv || '—'} kV${p.capacity_mva ? ' · ' + p.capacity_mva + ' MVA' : ''}</div>
+          ${p.operator ? `<div style="color:var(--muted);margin-top:4px">${p.operator}</div>` : ''}</div>`;
 }
 
+/* -------- plant select → context drawer -------- */
 function selectPlant(feature) {
-  if (activePopup) { activePopup.remove(); activePopup = null; }
   state.selectedId = feature.properties.id;
   map.setFilter('plants-selected', ['==', ['get', 'id'], state.selectedId]);
-  renderSelectedCard(feature);
-}
-
-function clearSelection() {
+  // Highlight other plants by the same owner with a soft accent ring.
+  const owner = (feature.properties.owner || '').trim();
+  map.setFilter('plants-owner-highlight',
+    owner ? ['all', ['==', ['get', 'owner'], owner], ['!=', ['get', 'id'], state.selectedId]]
+          : ['==', ['get', 'owner'], '__none__']);
   if (activePopup) { activePopup.remove(); activePopup = null; }
+  openContext(feature);
+}
+function clearSelection() {
   if (state.selectedId === null) return;
   state.selectedId = null;
   map.setFilter('plants-selected', ['==', ['get', 'id'], '__none__']);
-  document.getElementById('selected-section').style.display = 'none';
+  map.setFilter('plants-owner-highlight', ['==', ['get', 'owner'], '__none__']);
+  closeContext();
+  if (activePopup) { activePopup.remove(); activePopup = null; }
+}
+function findSimilar(p) {
+  const cap = +p.capacity_mw || 0;
+  // Snap to fuel mode and solo this fuel; relax capacity to half of selected.
+  state.colorBy = 'fuel';
+  state.cats = new Set([p.fuel_type]);
+  state.capMin = Math.max(0, Math.floor(cap * 0.5));
+  document.getElementById('cap-min').value = state.capMin;
+  document.getElementById('cap-min-label').textContent = state.capMin.toLocaleString();
+  const seg = document.getElementById('color-by-seg');
+  seg.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.cb === 'fuel'));
+  map.setPaintProperty('plants-circle', 'circle-color', colorExprFor('fuel'));
+  applyAll();
 }
 
-function renderSelectedCard(feature) {
-  const p = feature.properties;
-  const color = FUEL_COLORS[p.fuel_type] || '#9aa4b2';
-  const cap = p.capacity_mw ? (+p.capacity_mw).toLocaleString() : '—';
-  const card = document.getElementById('selected-card');
-  card.innerHTML = `
-    <button class="close" title="Clear selection" id="sel-close">×</button>
-    <div class="fuel-pill"><span class="dot" style="background:${color}"></span>${p.fuel_type || 'Unknown'}</div>
-    <div class="nm">${p.name || '(unnamed plant)'}</div>
-    <div class="cap">${cap}<span>MW</span></div>
-    <div class="meta">
-      <div><div class="k">Province</div><div class="v">${p.province || '—'}</div></div>
-      <div><div class="k">COD</div><div class="v">${p.cod || '—'}</div></div>
-      <div><div class="k">Status</div><div class="v">${p.status || '—'}</div></div>
-      <div><div class="k">Owner</div><div class="v">${p.owner || '—'}</div></div>
-      <div><div class="k">Source</div><div class="v">${p.source || '—'}</div></div>
-      <div><div class="k">ID</div><div class="v" style="font-family:ui-monospace,monospace;font-size:11px">${p.id || '—'}</div></div>
-    </div>
-    <div class="actions">
-      <button class="btn" id="sel-zoom">Zoom to</button>
-      <button class="btn" id="sel-similar">Find similar</button>
-    </div>`;
-  document.getElementById('selected-section').style.display = 'block';
-  document.getElementById('sel-close').onclick = clearSelection;
-  document.getElementById('sel-zoom').onclick = () => {
-    map.flyTo({ center: feature.geometry.coordinates, zoom: 11, duration: 800 });
-  };
-  document.getElementById('sel-similar').onclick = () => {
-    const cap = +p.capacity_mw || 0;
-    state.fuels = new Set([p.fuel_type]);
-    state.capMin = Math.max(0, Math.floor(cap * 0.5));
-    state.province = '';
-    document.getElementById('cap-min').value = state.capMin;
-    document.getElementById('cap-min-label').textContent = state.capMin.toLocaleString();
-    document.getElementById('province-filter').value = '';
-    syncFuelTilesUI();
-    applyFilters();
-  };
+/* -------- geometry helpers -------- */
+function haversineKm(a, b) {
+  const R = 6371, toRad = d => d * Math.PI / 180;
+  const dLat = toRad(b[1] - a[1]), dLon = toRad(b[0] - a[0]);
+  const lat1 = toRad(a[1]), lat2 = toRad(b[1]);
+  const x = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+function pointToSegKm(p, a, b) {
+  // local equirectangular at p's latitude — fine for ≤ 100 km
+  const kx = 111.32 * Math.cos(p[1] * Math.PI / 180), ky = 110.57;
+  const px = p[0]*kx, py = p[1]*ky;
+  const ax = a[0]*kx, ay = a[1]*ky, bx = b[0]*kx, by = b[1]*ky;
+  const dx = bx-ax, dy = by-ay, len2 = dx*dx + dy*dy;
+  if (len2 === 0) return Math.hypot(px-ax, py-ay);
+  let t = ((px-ax)*dx + (py-ay)*dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (ax + t*dx), py - (ay + t*dy));
+}
+function pointToLineKm(p, geom) {
+  const segs = geom.type === 'MultiLineString' ? geom.coordinates : [geom.coordinates];
+  let best = Infinity;
+  for (const seg of segs)
+    for (let i = 1; i < seg.length; i++) {
+      const d = pointToSegKm(p, seg[i-1], seg[i]);
+      if (d < best) best = d;
+    }
+  return best;
 }
 
-function applyFilters() {
-  const fuelFilter = ['in', ['get', 'fuel_type'], ['literal', [...state.fuels]]];
-  const capFilter  = ['>=', ['coalesce', ['get', 'capacity_mw'], 0], state.capMin];
-  const provFilter = state.province ? ['==', ['get', 'province'], state.province] : ['literal', true];
-  map.setFilter('plants-circle', ['all', fuelFilter, capFilter, provFilter]);
-  renderChips();
-  updateMetrics();
-}
-
-function renderChips() {
-  const root = document.getElementById('chips');
-  const sec = document.getElementById('chips-section');
-  const chips = [];
-  if (state.fuels.size > 0 && state.fuels.size < FUEL_ORDER.length) {
-    const list = [...state.fuels];
-    chips.push({ label: list.length > 2 ? `${list.length} fuels` : list.join(', '), clear: () => { state.fuels = new Set(FUEL_ORDER); syncFuelTilesUI(); applyFilters(); } });
-  }
-  if (state.capMin > 0) {
-    chips.push({ label: `≥ ${state.capMin.toLocaleString()} MW`, clear: () => {
-      state.capMin = 0;
-      const s = document.getElementById('cap-min');
-      s.value = 0;
-      document.getElementById('cap-min-label').textContent = '0';
-      s.dispatchEvent(new Event('input'));
-    }});
-  }
-  if (state.province) {
-    chips.push({ label: state.province, clear: () => {
-      state.province = '';
-      document.getElementById('province-filter').value = '';
-      applyFilters();
-    }});
-  }
-  if (state.voltBand) {
-    chips.push({ label: `Grid: ${state.voltBand}`, clear: () => {
-      state.voltBand = null;
-      applyVoltFilter();
-      syncVoltUI();
-      renderGridOverview();
-      applyFilters();
-    }});
-  }
-  if (chips.length === 0) { sec.style.display = 'none'; return; }
-  sec.style.display = 'block';
-  root.innerHTML = '';
-  for (const c of chips) {
-    const el = document.createElement('div');
-    el.className = 'chip';
-    el.innerHTML = `${c.label}<span class="x">×</span>`;
-    el.querySelector('.x').addEventListener('click', c.clear);
-    root.appendChild(el);
-  }
-}
-
-function resetAllFilters() {
-  state.fuels = new Set(FUEL_ORDER);
-  state.capMin = 0;
-  state.province = '';
-  state.voltBand = null;
-  document.getElementById('cap-min').value = 0;
-  document.getElementById('cap-min-label').textContent = '0';
-  document.getElementById('province-filter').value = '';
-  syncFuelTilesUI();
-  applyVoltFilter();
-  syncVoltUI();
-  renderGridOverview();
-  applyFilters();
-}
-
-function syncFuelTilesUI() {
-  document.querySelectorAll('#fuel-tiles .tile').forEach(t => {
-    t.classList.toggle('active', state.fuels.has(t.dataset.fuel));
+/* -------- context drawer -------- */
+let contextPeers = []; // populated during renderContextSections, consumed below
+function openContext(feature) {
+  const p = feature.properties, color = FUEL_COLORS[p.fuel_type] || '#9aa4b2';
+  const ctx = document.getElementById('ctx');
+  document.getElementById('ctx-dot').style.background = color;
+  document.getElementById('ctx-fuel').textContent = p.fuel_type || 'Unknown';
+  document.getElementById('ctx-nm').textContent = p.name || '(unnamed plant)';
+  document.getElementById('ctx-cap').innerHTML = `${p.capacity_mw ? (+p.capacity_mw).toLocaleString() : '—'}<span>MW</span>`;
+  document.getElementById('ctx-body').innerHTML = renderContextSections(feature);
+  ctx.classList.add('open');
+  // wire actions
+  const sim = ctx.querySelector('.act-similar');
+  if (sim) sim.addEventListener('click', () => findSimilar(p));
+  const fly = ctx.querySelector('.act-fly');
+  if (fly) fly.addEventListener('click', () => map.flyTo({ center: feature.geometry.coordinates, zoom: 11, duration: 600 }));
+  // owner-portfolio rows → fly + reselect
+  ctx.querySelectorAll('.ctx-peer').forEach(el => {
+    el.addEventListener('click', () => {
+      const peer = contextPeers[+el.dataset.peer];
+      if (!peer) return;
+      map.flyTo({ center: peer.geometry.coordinates, zoom: 11, duration: 600 });
+      setTimeout(() => selectPlant(peer), 600);
+    });
   });
 }
-
-function fmtMW(v) {
-  if (v >= 1000) return (v / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
-  return Math.round(v).toLocaleString();
+function closeContext() {
+  document.getElementById('ctx').classList.remove('open');
 }
 
-function updateMetrics() {
-  if (!state.data.plants) return;
-  const visible = state.data.plants.features.filter(f => {
+function renderContextSections(feature) {
+  const p = feature.properties, here = feature.geometry.coordinates;
+
+  // facts
+  let html = `<section><div class="meta">
+    <div><div class="k">Province</div><div class="v">${p.province || '—'}</div></div>
+    <div><div class="k">COD</div><div class="v">${p.cod || '—'}</div></div>
+    <div><div class="k">Status</div><div class="v">${p.status || '—'}</div></div>
+    <div><div class="k">Owner</div><div class="v">${p.owner || '—'}</div></div>
+  </div></section>`;
+
+  // grid
+  const subs = state.data.substations.features;
+  let nearestSub = null, nearestSubKm = Infinity;
+  for (const f of subs) {
+    const d = haversineKm(here, f.geometry.coordinates);
+    if (d < nearestSubKm) { nearestSubKm = d; nearestSub = f; }
+  }
+  // Nearest 220 kV+ substation — meaningful for transmission-grade interconnection
+  let bigSub = null, bigSubKm = Infinity;
+  for (const f of subs) {
+    if ((+f.properties.voltage_kv || 0) < 220) continue;
+    const d = haversineKm(here, f.geometry.coordinates);
+    if (d < bigSubKm) { bigSubKm = d; bigSub = f; }
+  }
+  // Nearest transmission line (any voltage). Skip far candidates with bbox prefilter for speed.
+  const txs = state.data.transmission.features;
+  let nearestLine = null, nearestLineKm = Infinity;
+  for (const f of txs) {
+    const c = f.geometry.type === 'MultiLineString' ? f.geometry.coordinates[0][0] : f.geometry.coordinates[0];
+    if (Math.abs(c[0] - here[0]) > 2 || Math.abs(c[1] - here[1]) > 2) continue;
+    const d = pointToLineKm(here, f.geometry);
+    if (d < nearestLineKm) { nearestLineKm = d; nearestLine = f; }
+  }
+  html += `<section><h3>Grid context</h3>
+    ${nearestSub ? `<div class="ctx-line"><span><span class="sw" style="background:${voltColor(nearestSub.properties.voltage_kv)}"></span>Nearest substation${nearestSub.properties.name ? ' — ' + nearestSub.properties.name : ''}</span><b>${fmtKm(nearestSubKm)}${nearestSub.properties.voltage_kv ? ` · ${nearestSub.properties.voltage_kv} kV` : ''}</b></div>` : ''}
+    ${bigSub && bigSub !== nearestSub ? `<div class="ctx-line"><span><span class="sw" style="background:${voltColor(bigSub.properties.voltage_kv)}"></span>Nearest 220 kV+ sub</span><b>${fmtKm(bigSubKm)} · ${bigSub.properties.voltage_kv} kV</b></div>` : ''}
+    ${nearestLine ? `<div class="ctx-line"><span><span class="sw" style="background:${voltColor(nearestLine.properties.voltage_kv)}"></span>Nearest transmission line</span><b>${fmtKm(nearestLineKm)}${nearestLine.properties.voltage_kv ? ` · ${nearestLine.properties.voltage_kv} kV` : ''}</b></div>` : ''}
+    ${!nearestSub && !nearestLine ? `<div class="ctx-empty">No grid features within search range.</div>` : ''}
+  </section>`;
+
+  // owner portfolio
+  const ownerKey = (p.owner || '').trim().toLowerCase();
+  if (ownerKey) {
+    const peers = state.data.plants.features.filter(f =>
+      (f.properties.owner || '').trim().toLowerCase() === ownerKey && f.properties.id !== p.id);
+    peers.sort((a, b) => (+b.properties.capacity_mw || 0) - (+a.properties.capacity_mw || 0));
+    const totalMw = peers.reduce((s, f) => s + (+f.properties.capacity_mw || 0), 0) + (+p.capacity_mw || 0);
+    const sameProv = peers.filter(f => f.properties.province === p.province).length;
+    const visible = peers.slice(0, 5);
+    contextPeers = visible;  // captured for click wiring (see openContext)
+    html += `<section><h3>Owner portfolio</h3>
+      <div class="ctx-line"><span>${peers.length + 1} plant${peers.length ? 's' : ''} · this owner</span><b>${fmtMW(totalMw)} MW total</b></div>
+      ${sameProv ? `<div class="ctx-line"><span>Same province</span><b>${sameProv} other</b></div>` : ''}
+      ${visible.map((f, i) => `<div class="ctx-line ctx-peer" data-peer="${i}" style="cursor:pointer"><span style="opacity:.85">${f.properties.name || '(unnamed)'} · ${f.properties.fuel_type || '—'}${f.properties.province ? ' · ' + f.properties.province : ''}</span><b>${(+f.properties.capacity_mw || 0).toLocaleString()} MW</b></div>`).join('')}
+      ${peers.length > 5 ? `<div class="ctx-empty" style="text-align:left;padding-top:6px">+${peers.length - 5} more…</div>` : ''}
+    </section>`;
+  } else {
+    contextPeers = [];
+  }
+
+  // peers within 50 km
+  const RAD = 50;
+  const peers50 = [];
+  for (const f of state.data.plants.features) {
+    if (f.properties.id === p.id) continue;
+    if (Math.abs(f.geometry.coordinates[0] - here[0]) > 0.6) continue;
+    if (Math.abs(f.geometry.coordinates[1] - here[1]) > 0.6) continue;
+    const d = haversineKm(here, f.geometry.coordinates);
+    if (d <= RAD) peers50.push({ f, d });
+  }
+  if (peers50.length) {
+    const byFuel = {};
+    for (const { f } of peers50) {
+      const k = f.properties.fuel_type || 'Unknown';
+      byFuel[k] = byFuel[k] || { n: 0, mw: 0 };
+      byFuel[k].n++;
+      byFuel[k].mw += +f.properties.capacity_mw || 0;
+    }
+    const rows = Object.entries(byFuel).sort((a,b) => b[1].mw - a[1].mw)
+      .map(([k, v]) => `<div class="ctx-line"><span><span class="sw" style="background:${FUEL_COLORS[k] || '#9aa4b2'}"></span>${k}</span><b>${v.n} · ${fmtMW(v.mw)} MW</b></div>`)
+      .join('');
+    html += `<section><h3>Peers within ${RAD} km</h3>${rows}</section>`;
+  }
+
+  // province rollup
+  if (p.province) {
+    const inProv = state.data.plants.features.filter(f => f.properties.province === p.province);
+    const provMw = inProv.reduce((s, f) => s + (+f.properties.capacity_mw || 0), 0);
+    const provFuelMw = {};
+    for (const f of inProv) {
+      const k = f.properties.fuel_type || 'Unknown';
+      provFuelMw[k] = (provFuelMw[k] || 0) + (+f.properties.capacity_mw || 0);
+    }
+    const top = Object.entries(provFuelMw).sort((a,b) => b[1] - a[1]).slice(0, 4);
+    html += `<section><h3>${p.province}</h3>
+      <div class="ctx-line"><span>${inProv.length} plants · all fuels</span><b>${fmtMW(provMw)} MW</b></div>
+      ${top.map(([k, mw]) => `<div class="ctx-line"><span><span class="sw" style="background:${FUEL_COLORS[k] || '#9aa4b2'}"></span>${k}</span><b>${fmtMW(mw)} MW</b></div>`).join('')}
+    </section>`;
+  }
+
+  html += `<div class="ctx-actions">
+    <button class="act-fly">Zoom to plant</button>
+    <button class="act-similar">Find similar</button>
+  </div>`;
+
+  return html;
+}
+
+function voltColor(v) {
+  v = +v || 0;
+  if (v >= 500) return '#d32f2f';
+  if (v >= 220) return '#f57c00';
+  if (v >= 110) return '#fbc02d';
+  if (v >= 35)  return '#43a047';
+  if (v > 0)    return '#9aa4b2';
+  return '#cdd5df';
+}
+function fmtKm(km) { return km < 1 ? `${(km*1000).toFixed(0)} m` : `${km.toFixed(km < 10 ? 1 : 0)} km`; }
+
+/* -------- search + screener (unified) -------- */
+let lastResults = [];
+function setupSearchScreen() {
+  const plants = state.data.plants.features;
+
+  // populate static dropdowns
+  const provs = [...new Set(plants.map(f => f.properties.province).filter(Boolean))].sort();
+  const provSel = document.getElementById('screen-prov');
+  for (const v of provs) provSel.insertAdjacentHTML('beforeend', `<option>${v}</option>`);
+  const statuses = [...new Set(plants.map(f => f.properties.status).filter(Boolean))].sort();
+  const statSel = document.getElementById('screen-status');
+  for (const v of statuses) statSel.insertAdjacentHTML('beforeend', `<option>${v}</option>`);
+
+  // fuel pills (multi-select; empty selection = all)
+  const fuelRoot = document.getElementById('screen-fuels');
+  const selectedFuels = new Set();
+  for (const f of FUELS) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = f.id; b.dataset.fuel = f.id;
+    b.style.setProperty('--fc', f.color);
+    b.addEventListener('click', () => {
+      if (selectedFuels.has(f.id)) selectedFuels.delete(f.id);
+      else selectedFuels.add(f.id);
+      b.classList.toggle('on');
+      run();
+    });
+    fuelRoot.appendChild(b);
+  }
+
+  const $ = id => document.getElementById(id);
+  const formIds = ['screen-cap-min','screen-cap-max','screen-cod-min','screen-cod-max','screen-status','screen-prov','screen-owner'];
+
+  // Filter toggle button
+  const toggleBtn = $('filter-toggle');
+  const panel = $('search-panel');
+  toggleBtn.addEventListener('click', () => {
+    const open = !panel.classList.contains('show');
+    panel.classList.toggle('show', open);
+    toggleBtn.classList.toggle('on', open);
+  });
+
+  const codYear = c => {
+    if (!c) return null;
+    const m = String(c).match(/(\d{4})/);
+    return m ? +m[1] : null;
+  };
+
+  const collect = () => ({
+    name: $('search').value.trim().toLowerCase() || null,
+    fuels: selectedFuels,
+    capMin: +$('screen-cap-min').value || null,
+    capMax: +$('screen-cap-max').value || null,
+    codMin: +$('screen-cod-min').value || null,
+    codMax: +$('screen-cod-max').value || null,
+    status: $('screen-status').value || null,
+    prov: $('screen-prov').value || null,
+    owner: $('screen-owner').value.trim().toLowerCase() || null,
+  });
+
+  const matches = q => f => {
     const p = f.properties;
-    if (!state.fuels.has(p.fuel_type)) return false;
-    if ((p.capacity_mw || 0) < state.capMin) return false;
-    if (state.province && p.province !== state.province) return false;
+    if (q.name && !(p.name || '').toLowerCase().includes(q.name)) return false;
+    if (q.fuels.size && !q.fuels.has(p.fuel_type)) return false;
+    const cap = +p.capacity_mw || 0;
+    if (q.capMin != null && cap < q.capMin) return false;
+    if (q.capMax != null && cap > q.capMax) return false;
+    const yr = codYear(p.cod);
+    if (q.codMin != null && (yr == null || yr < q.codMin)) return false;
+    if (q.codMax != null && (yr == null || yr > q.codMax)) return false;
+    if (q.status && p.status !== q.status) return false;
+    if (q.prov && p.province !== q.prov) return false;
+    if (q.owner && !(p.owner || '').toLowerCase().includes(q.owner)) return false;
     return true;
+  };
+
+  const filterCount = q => {
+    let n = 0;
+    if (q.name) n++;
+    if (q.fuels.size) n++;
+    if (q.capMin != null || q.capMax != null) n++;
+    if (q.codMin != null || q.codMax != null) n++;
+    if (q.status) n++;
+    if (q.prov) n++;
+    if (q.owner) n++;
+    return n;
+  };
+
+  const run = () => {
+    const q = collect();
+    const n = filterCount(q);
+
+    // Toggle badge — but the search input itself is OUTSIDE the panel, so
+    // it shouldn't auto-open the panel. Only show the panel if the user
+    // toggled it open OR if any of the form-only filters are active.
+    const formActive = n - (q.name ? 1 : 0) > 0;
+    toggleBtn.classList.toggle('has-filters', n > 0);
+    $('filter-badge').textContent = n;
+    if (formActive && !panel.classList.contains('show')) {
+      panel.classList.add('show');
+      toggleBtn.classList.add('on');
+    }
+
+    if (!n) {
+      lastResults = [];
+      $('search-count').textContent = '0';
+      $('search-list').innerHTML = '';
+      applyScreenHighlight(null);
+      // Hide panel only if user hasn't manually opened it via the button —
+      // we leave the manual state alone here for predictability.
+      return;
+    }
+
+    lastResults = plants.filter(matches(q)).sort((a,b) => (+b.properties.capacity_mw || 0) - (+a.properties.capacity_mw || 0));
+    $('search-count').textContent = lastResults.length.toLocaleString();
+
+    // Make sure the panel is visible to show the result list, even for plain
+    // text search (no form filters).
+    if (!panel.classList.contains('show')) {
+      panel.classList.add('show');
+      toggleBtn.classList.add('on');
+    }
+
+    const list = $('search-list');
+    if (!lastResults.length) {
+      list.innerHTML = '<div class="screen-empty">No plants match these criteria.</div>';
+      applyScreenHighlight([]);
+      return;
+    }
+
+    const top = lastResults.slice(0, 200);
+    list.innerHTML = top.map((f, i) => {
+      const p = f.properties;
+      const color = FUEL_COLORS[p.fuel_type] || '#9aa4b2';
+      const yr = codYear(p.cod);
+      const sub = [p.province, yr ? `COD ${yr}` : null, p.status, p.owner].filter(Boolean).join(' · ');
+      return `<div class="screen-row" data-i="${i}">
+        <span class="dot" style="background:${color}"></span>
+        <span class="nm">${p.name || '(unnamed)'}<small>${sub}</small></span>
+        <span class="mw">${(+p.capacity_mw || 0).toLocaleString()} MW</span>
+      </div>`;
+    }).join('') + (lastResults.length > 200 ? `<div class="screen-empty">Showing top 200 by capacity. ${lastResults.length} total — refine filters or export.</div>` : '');
+    list.querySelectorAll('.screen-row').forEach(el => el.addEventListener('click', () => {
+      const f = top[+el.dataset.i];
+      map.flyTo({ center: f.geometry.coordinates, zoom: 11, duration: 700 });
+      setTimeout(() => selectPlant(f), 700);
+    }));
+
+    applyScreenHighlight(lastResults.map(f => f.properties.id).filter(Boolean));
+  };
+
+  const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
+  const debouncedRun = debounce(run, 200);
+
+  $('search').addEventListener('input', debouncedRun);
+  $('search').addEventListener('keydown', e => {
+    if (e.key === 'Escape') { e.target.value = ''; debouncedRun(); }
+    else if (e.key === 'Enter' && lastResults.length === 1) {
+      const f = lastResults[0];
+      map.flyTo({ center: f.geometry.coordinates, zoom: 11, duration: 700 });
+      setTimeout(() => selectPlant(f), 700);
+    }
   });
-  const totalCap = visible.reduce((s, f) => s + (+f.properties.capacity_mw || 0), 0);
-  document.getElementById('m-count').textContent = visible.length.toLocaleString();
-  document.getElementById('m-cap').innerHTML = `${fmtMW(totalCap)}<span class="u"> MW</span>`;
 
-  const byFuel = {};
-  for (const f of FUEL_ORDER) byFuel[f] = { cap: 0, count: 0 };
-  for (const f of visible) {
-    const ft = f.properties.fuel_type;
-    if (!byFuel[ft]) byFuel[ft] = { cap: 0, count: 0 };
-    byFuel[ft].cap += +f.properties.capacity_mw || 0;
-    byFuel[ft].count += 1;
+  for (const id of formIds) {
+    const el = $(id);
+    el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', debouncedRun);
   }
-  renderFuelMixBar(byFuel, totalCap);
 
-  const byProv = {};
-  for (const f of visible) {
-    const pr = f.properties.province || '— Unassigned';
-    if (!byProv[pr]) byProv[pr] = { cap: 0, count: 0 };
-    byProv[pr].cap += +f.properties.capacity_mw || 0;
-    byProv[pr].count += 1;
-  }
-  const top = Object.entries(byProv).sort((a, b) => b[1].cap - a[1].cap).slice(0, 8);
-  renderProvinceBars(top);
+  $('search-clear').addEventListener('click', () => {
+    $('search').value = '';
+    for (const id of formIds) $(id).value = '';
+    selectedFuels.clear();
+    fuelRoot.querySelectorAll('button.on').forEach(b => b.classList.remove('on'));
+    run();
+  });
+
+  $('search-export').addEventListener('click', () => {
+    const rows = (lastResults.length ? lastResults : plants).map(f => f.properties);
+    const cols = ['id', 'name', 'fuel_type', 'capacity_mw', 'status', 'cod', 'owner', 'province', 'district'];
+    const esc = v => {
+      if (v == null) return '';
+      const s = String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const csv = [cols.join(','), ...rows.map(r => cols.map(c => esc(r[c])).join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `vn-energy-screen-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  run();
 }
 
-function renderFuelMixBar(byFuel, total) {
-  const bar = document.getElementById('mix-bar');
-  const legend = document.getElementById('mix-legend');
-  bar.innerHTML = '';
-  legend.innerHTML = '';
-  if (!total) {
-    bar.innerHTML = '<div style="flex:1"></div>';
-    legend.innerHTML = '<span style="color:var(--muted);font-style:italic">No plants in selection</span>';
+function applyScreenHighlight(matchIds) {
+  if (matchIds === null) {
+    // Cleared: restore default plant paint
+    map.setPaintProperty('plants-circle', 'circle-opacity', 0.92);
+    map.setPaintProperty('plants-circle', 'circle-stroke-width', 1.2);
+    map.setPaintProperty('plants-circle', 'circle-stroke-color', '#ffffff');
     return;
   }
-  const items = FUEL_ORDER
-    .filter(f => byFuel[f].cap > 0)
-    .map(f => ({ id: f, cap: byFuel[f].cap, pct: byFuel[f].cap / total * 100 }))
-    .sort((a, b) => b.cap - a.cap);
-
-  for (const it of items) {
-    const seg = document.createElement('div');
-    seg.className = 'seg';
-    seg.style.flex = it.pct;
-    seg.style.background = FUEL_COLORS[it.id];
-    seg.title = `${it.id} · ${it.pct.toFixed(1)}% · ${fmtMW(it.cap)} MW`;
-    seg.addEventListener('click', () => toggleSoloFuel(it.id));
-    bar.appendChild(seg);
-
-    const lg = document.createElement('span');
-    lg.className = 'it';
-    lg.title = `Click to filter to ${it.id}`;
-    lg.innerHTML = `<span class="sw" style="background:${FUEL_COLORS[it.id]}"></span>${it.id} <span class="v">${it.pct.toFixed(0)}%</span>`;
-    lg.addEventListener('click', () => toggleSoloFuel(it.id));
-    legend.appendChild(lg);
+  if (!matchIds.length) {
+    // Active filter, no matches — dim everything.
+    map.setPaintProperty('plants-circle', 'circle-opacity', 0.12);
+    map.setPaintProperty('plants-circle', 'circle-stroke-width', 0.3);
+    return;
   }
+  const matchExpr = ['in', ['get', 'id'], ['literal', matchIds]];
+  map.setPaintProperty('plants-circle', 'circle-opacity', ['case', matchExpr, 0.95, 0.12]);
+  map.setPaintProperty('plants-circle', 'circle-stroke-width', ['case', matchExpr, 1.6, 0.3]);
+  map.setPaintProperty('plants-circle', 'circle-stroke-color', ['case', matchExpr, '#1e88e5', '#ffffff']);
 }
 
-function toggleSoloFuel(fuel) {
-  if (state.fuels.size === 1 && state.fuels.has(fuel)) {
-    state.fuels = new Set(FUEL_ORDER);
-  } else {
-    state.fuels = new Set([fuel]);
-  }
-  syncFuelTilesUI();
-  applyFilters();
+/* -------- filter application + summary rendering -------- */
+function applyAll() {
+  // plants
+  const plantFilter = ['all',
+    ['>=', ['coalesce', ['get', 'capacity_mw'], 0], state.capMin],
+  ];
+  const catF = catFilterFor(state.cats, state.colorBy);
+  if (catF) plantFilter.push(catF);
+  map.setFilter('plants-circle', plantFilter);
+
+  // transmission + substations voltage filters
+  map.setFilter('transmission-line', voltBandFilter(state.voltBandTx));
+  map.setFilter('substations-circle', voltBandFilter(state.voltBandSs));
+
+  renderPlantsSummary();
+  renderTxSummary();
+  renderSsSummary();
 }
 
-function renderGridOverview() {
-  const g = state.data.grid;
-  if (!g) return;
-  document.getElementById('g-lines').textContent = g.transmission.count.toLocaleString();
-  document.getElementById('g-km').innerHTML = `${fmtKm(g.transmission.total_km)}<span class="u"> km</span>`;
-
-  // Voltage mix bar — weighted by km
-  const bar = document.getElementById('grid-mix-bar');
-  const legend = document.getElementById('grid-mix-legend');
-  bar.innerHTML = ''; legend.innerHTML = '';
-  const total = g.transmission.bands.reduce((s, b) => s + (b.value || 0), 0);
-  for (const b of g.transmission.bands) {
-    if (!b.value) continue;
-    const pct = (b.value / total) * 100;
-    const seg = document.createElement('div');
-    seg.className = 'seg';
-    seg.style.flex = pct;
-    seg.style.background = b.color;
-    seg.title = `${b.label} · ${pct.toFixed(1)}% · ${fmtKm(b.value)} km`;
-    seg.addEventListener('click', () => toggleVoltBand(b.label));
-    bar.appendChild(seg);
-
-    const lg = document.createElement('span');
-    lg.className = 'it';
-    lg.title = `Click to filter to ${b.label}`;
-    lg.innerHTML = `<span class="sw" style="background:${b.color}"></span>${b.label} <span class="v">${pct.toFixed(0)}%</span>`;
-    lg.addEventListener('click', () => toggleVoltBand(b.label));
-    legend.appendChild(lg);
-  }
-  syncVoltUI();
-
-  // Substation bars by voltage
-  const root = document.getElementById('sub-bars');
-  root.innerHTML = '';
-  const ssMax = Math.max(1, ...g.substations.bands.map(b => b.count));
-  for (const b of g.substations.bands) {
-    const pct = (b.count / ssMax) * 100;
-    const isActive = state.voltBand === b.label;
-    const el = document.createElement('div');
-    el.className = `prov-clickable${isActive ? ' is-active' : ''}`;
-    el.title = isActive ? 'Click to clear filter' : `Filter to ${b.label}`;
-    el.innerHTML = `
-      <div class="prov-row">
-        <div class="pn"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${b.color};margin-right:6px;vertical-align:middle"></span>${b.label}</div>
-        <div class="pv">${b.count.toLocaleString()}</div>
-      </div>
-      <div class="bar"><div style="width:${pct}%;background:${b.color}"></div></div>`;
-    el.addEventListener('click', () => toggleVoltBand(b.label));
-    root.appendChild(el);
-  }
-}
-
-function toggleVoltBand(label) {
-  state.voltBand = (state.voltBand === label) ? null : label;
-  applyVoltFilter();
-  syncVoltUI();
-  renderGridOverview();
-  renderChips();
-}
-
-function applyVoltFilter() {
+function voltBandFilter(label) {
+  if (!label) return null;
   const v = ['coalesce', ['to-number', ['get', 'voltage_kv']], 0];
-  let f = null;
-  if (state.voltBand) {
-    const [lo, hi] = BAND_RANGES[state.voltBand];
-    if (state.voltBand === 'Unknown') {
-      f = ['==', v, 0];
-    } else if (state.voltBand === '< 35 kV') {
-      f = ['all', ['>', v, 0], ['<', v, 35]];
-    } else {
-      f = ['all', ['>=', v, lo], ['<', v, hi]];
-    }
+  switch (label) {
+    case 'Unknown':  return ['==', v, 0];
+    case '< 35 kV':  return ['all', ['>', v, 0],   ['<', v, 35]];
+    case '35–66 kV': return ['all', ['>=', v, 35], ['<', v, 110]];
+    case '110 kV':   return ['all', ['>=', v, 110], ['<', v, 220]];
+    case '220 kV':   return ['all', ['>=', v, 220], ['<', v, 500]];
+    case '≥ 500 kV': return ['>=', v, 500];
   }
-  map.setFilter('transmission-line', f);
-  map.setFilter('substations-circle', f);
 }
 
-function syncVoltUI() {
-  const segs = document.querySelectorAll('#grid-mix-bar .seg');
-  segs.forEach(s => {
-    s.style.opacity = (state.voltBand && !s.title.startsWith(state.voltBand)) ? 0.3 : 1;
+function visiblePlants() {
+  return state.data.plants.features.filter(f => {
+    const p = f.properties;
+    if ((p.capacity_mw || 0) < state.capMin) return false;
+    if (state.cats.size && !state.cats.has(categoryFor(f, state.colorBy))) return false;
+    return true;
   });
 }
 
-function fmtKm(v) {
-  if (v >= 1000) return (v / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
-  return Math.round(v).toLocaleString();
+function renderPlantsSummary() {
+  const visible = visiblePlants();
+  const totalCap = visible.reduce((s, f) => s + (+f.properties.capacity_mw || 0), 0);
+  document.getElementById('plants-count').textContent = visible.length.toLocaleString();
+  document.getElementById('plants-cap').textContent = fmtMW(totalCap);
+
+  const byCat = new Map();
+  for (const f of visible) {
+    const cat = categoryFor(f, state.colorBy);
+    byCat.set(cat, (byCat.get(cat) || 0) + (+f.properties.capacity_mw || 0));
+  }
+  const items = orderedCatsFor(state.colorBy, byCat).map(cat => ({
+    label: cat, color: colorFor(cat, state.colorBy), value: byCat.get(cat) || 0,
+  }));
+  const soloSet = state.cats.size ? state.cats : null;
+  renderMixBar('plants-mix-bar', 'plants-mix-legend', items, totalCap,
+    label => toggleSoloCat(label), soloSet, fmtMW, 'MW');
 }
 
-function renderProvinceBars(rows) {
-  const root = document.getElementById('province-bars');
+function renderTxSummary() {
+  const features = state.data.transmission.features;
+  const total = features.length;
+  let totalKm = 0;
+  const byBand = {};
+  for (const b of VOLTAGE_BANDS) byBand[b.label] = { km: 0, count: 0, color: b.color };
+  for (const f of features) {
+    const b = f.properties._band, km = f.properties._km;
+    byBand[b].km += km; byBand[b].count += 1; totalKm += km;
+  }
+  document.getElementById('tx-count').textContent = total.toLocaleString();
+  document.getElementById('tx-km').textContent = fmtMW(totalKm);
+
+  renderMixBar('tx-mix-bar', 'tx-mix-legend',
+    VOLTAGE_BANDS.map(b => ({ label: b.label, color: b.color, value: byBand[b.label].km })),
+    totalKm,
+    label => { state.voltBandTx = state.voltBandTx === label ? null : label; applyAll(); },
+    state.voltBandTx, fmtMW, 'km');
+}
+
+function renderSsSummary() {
+  const features = state.data.substations.features;
+  document.getElementById('ss-count').textContent = features.length.toLocaleString();
+  const byBand = {};
+  for (const b of VOLTAGE_BANDS) byBand[b.label] = { count: 0, color: b.color };
+  for (const f of features) byBand[f.properties._band].count++;
+
+  const root = document.getElementById('ss-rows');
   root.innerHTML = '';
-  if (!rows.length) { root.innerHTML = '<div style="color:var(--muted);font-size:12px">No plants match.</div>'; return; }
-  const max = Math.max(1, ...rows.map(r => r[1].cap));
-  for (const [name, v] of rows) {
-    const pct = (v.cap / max) * 100;
+  for (const b of VOLTAGE_BANDS) {
+    const c = byBand[b.label].count;
+    if (!c) continue;
+    const isActive = state.voltBandSs === b.label;
     const el = document.createElement('div');
-    const clickable = name && !name.startsWith('—');
-    const isActive = state.province === name;
-    el.className = clickable ? `prov-clickable${isActive ? ' is-active' : ''}` : '';
-    el.title = clickable ? (isActive ? 'Click to clear filter' : `Filter to ${name}`) : '';
-    el.innerHTML = `
-      <div class="prov-row">
-        <div class="pn">${name}</div>
-        <div class="pv">${fmtMW(v.cap)} MW · ${v.count}</div>
-      </div>
-      <div class="bar"><div style="width:${pct}%"></div></div>`;
-    if (clickable) {
-      el.addEventListener('click', () => {
-        state.province = (state.province === name) ? '' : name;
-        document.getElementById('province-filter').value = state.province;
-        applyFilters();
-      });
-    }
+    el.className = 'sub-row' + (isActive ? ' active' : '');
+    el.innerHTML = `<div class="pn"><span class="sw" style="background:${b.color}"></span>${b.label}</div><div class="pv">${c.toLocaleString()}</div>`;
+    el.addEventListener('click', () => {
+      state.voltBandSs = isActive ? null : b.label;
+      applyAll();
+    });
     root.appendChild(el);
   }
+}
+
+function renderMixBar(barId, legendId, items, total, onClick, solo, fmt, unit) {
+  const bar = document.getElementById(barId);
+  const legend = document.getElementById(legendId);
+  bar.innerHTML = ''; legend.innerHTML = '';
+  if (!total) {
+    bar.innerHTML = '<div style="flex:1;background:var(--line)"></div>';
+    legend.innerHTML = '<span style="color:var(--muted);font-style:italic">No data in selection</span>';
+    return;
+  }
+  // `solo` may be a string (single label), a Set of labels, or null
+  const inSolo = solo && (solo instanceof Set ? l => solo.has(l) : l => l === solo);
+  const filtered = items.filter(it => it.value > 0).sort((a, b) => b.value - a.value);
+  for (const it of filtered) {
+    const pct = it.value / total * 100;
+    const dim = inSolo && !inSolo(it.label) ? ' dim' : '';
+    const seg = document.createElement('div');
+    seg.className = 'seg' + dim;
+    seg.style.flex = pct;
+    seg.style.background = it.color;
+    seg.title = `${it.label} · ${pct.toFixed(1)}% · ${fmt(it.value)} ${unit}`;
+    if (onClick) seg.addEventListener('click', () => onClick(it.label));
+    bar.appendChild(seg);
+
+    const lg = document.createElement('span');
+    lg.className = 'it' + dim;
+    lg.title = seg.title;
+    lg.innerHTML = `<span class="sw" style="background:${it.color}"></span>${it.label} <span class="v">${pct.toFixed(0)}%</span>`;
+    if (onClick) lg.addEventListener('click', () => onClick(it.label));
+    legend.appendChild(lg);
+  }
+}
+
+function toggleSoloCat(cat) {
+  if (state.cats.size === 1 && state.cats.has(cat)) state.cats = new Set();
+  else state.cats = new Set([cat]);
+  applyAll();
+}
+
+function wireColorBy() {
+  const seg = document.getElementById('color-by-seg');
+  seg.addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    const mode = btn.dataset.cb;
+    if (mode === state.colorBy) return;
+    state.colorBy = mode;
+    state.cats = new Set(); // categories are mode-relative
+    seg.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+    map.setPaintProperty('plants-circle', 'circle-color', colorExprFor(mode));
+    applyAll();
+  });
 }
 </script>
 </body>
