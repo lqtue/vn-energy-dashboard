@@ -344,9 +344,11 @@ map.on('load', async () => {
 
   map.addSource('plants', { type: 'geojson', data: plants, generateId: true });
   map.addSource('provinces', { type: 'geojson', data: provinces });
-  // Vector tiles (PMTiles) — only the viewport is fetched, no upfront 7MB load
-  map.addSource('transmission', { type: 'vector', url: 'pmtiles://data/transmission.pmtiles' });
-  map.addSource('substations', { type: 'vector', url: 'pmtiles://data/substations.pmtiles' });
+  // Vector tiles (PMTiles) — served via jsDelivr because GitHub Pages
+  // doesn't honor HTTP Range requests, which PMTiles requires.
+  const PMT = 'https://cdn.jsdelivr.net/gh/lqtue/vn-energy-dashboard@main/data';
+  map.addSource('transmission', { type: 'vector', url: `pmtiles://${PMT}/transmission.pmtiles` });
+  map.addSource('substations',  { type: 'vector', url: `pmtiles://${PMT}/substations.pmtiles` });
 
   map.addLayer({ id: 'provinces-fill', type: 'fill', source: 'provinces',
     paint: { 'fill-color': '#1e88e5', 'fill-opacity': 0.03 } }, 'labels');
