@@ -245,6 +245,9 @@
 </div>
 
 <script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
 const FUELS = [
   { id: 'Hydro',   icon: 'i-hydro',   color: '#1e88e5' },
   { id: 'Solar',   icon: 'i-solar',   color: '#f5b400' },
@@ -327,19 +330,22 @@ const map = new maplibregl.Map({
 map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
 map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left');
 
+const EMPTY_FC = { type: 'FeatureCollection', features: [] };
+const fetchJSON = url => fetch(url, { cache: 'force-cache' }).then(r => r.json());
+
 map.on('load', async () => {
-  const [plants, transmission, substations, provinces] = await Promise.all([
-    fetch('data/plants.geojson').then(r => r.json()),
-    fetch('data/transmission.geojson').then(r => r.json()),
-    fetch('data/substations.geojson').then(r => r.json()),
-    fetch('data/provinces.geojson').then(r => r.json()),
+  // Tier 1: critical for first paint — small, fast
+  const [plants, provinces] = await Promise.all([
+    fetchJSON('data/plants.geojson'),
+    fetchJSON('data/provinces.geojson'),
   ]);
   state.data.plants = plants;
 
-  map.addSource('plants', { type: 'geojson', data: plants });
-  map.addSource('transmission', { type: 'geojson', data: transmission });
-  map.addSource('substations', { type: 'geojson', data: substations });
+  map.addSource('plants', { type: 'geojson', data: plants, generateId: true });
   map.addSource('provinces', { type: 'geojson', data: provinces });
+  // Tier 2/3 placeholders — populated lazily
+  map.addSource('transmission', { type: 'geojson', data: EMPTY_FC });
+  map.addSource('substations', { type: 'geojson', data: EMPTY_FC });
 
   map.addLayer({ id: 'provinces-fill', type: 'fill', source: 'provinces',
     paint: { 'fill-color': '#1e88e5', 'fill-opacity': 0.03 } }, 'labels');
@@ -397,7 +403,52 @@ map.on('load', async () => {
   attachPopups();
   document.getElementById('chip-reset').addEventListener('click', resetAllFilters);
   applyFilters();
+
+  // Tier 2: transmission (~7MB) — defer to idle so first paint isn't blocked
+  const idle = window.requestIdleCallback || (cb => setTimeout(cb, 250));
+  idle(loadTransmission, { timeout: 2000 });
+  // Tier 3: substations — load on first toggle (see wireLayerToggles)
 });
+
+let _transmissionLoaded = false;
+async function loadTransmission() {
+  if (_transmissionLoaded) return;
+  _transmissionLoaded = true;
+  setBadge('Loading transmission grid…');
+  const data = await fetchJSON('data/transmission.geojson');
+  if (map.getSource('transmission')) map.getSource('transmission').setData(data);
+  clearBadge();
+}
+
+let _substationsLoaded = false;
+async function loadSubstations() {
+  if (_substationsLoaded) return;
+  _substationsLoaded = true;
+  setBadge('Loading substations…');
+  const data = await fetchJSON('data/substations.geojson');
+  if (map.getSource('substations')) map.getSource('substations').setData(data);
+  clearBadge();
+}
+
+let _badgeTimer = null;
+function setBadge(text) {
+  let el = document.getElementById('load-badge');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'load-badge';
+    el.style.cssText = 'position:absolute;bottom:14px;right:14px;background:rgba(255,255,255,0.92);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:11.5px;color:var(--text-2);box-shadow:0 2px 6px rgba(0,0,0,0.06);z-index:5;font-family:inherit';
+    document.getElementById('map').appendChild(el);
+  }
+  el.textContent = text;
+  el.style.display = 'block';
+}
+function clearBadge() {
+  clearTimeout(_badgeTimer);
+  _badgeTimer = setTimeout(() => {
+    const el = document.getElementById('load-badge');
+    if (el) el.style.display = 'none';
+  }, 400);
+}
 
 function buildFuelTiles() {
   const root = document.getElementById('fuel-tiles');
@@ -500,6 +551,8 @@ function wireLayerToggles() {
     document.getElementById(id).addEventListener('change', e => {
       const v = e.target.checked ? 'visible' : 'none';
       layers.forEach(l => map.setLayoutProperty(l, 'visibility', v));
+      if (e.target.checked && id === 'lyr-substations') loadSubstations();
+      if (e.target.checked && id === 'lyr-transmission') loadTransmission();
     });
   }
   map.setLayoutProperty('substations-circle', 'visibility', 'none');
