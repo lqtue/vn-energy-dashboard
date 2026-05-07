@@ -32,6 +32,10 @@ self.addEventListener('fetch', e => {
     return;
   }
 
+  // PMTiles uses HTTP byte-range requests — don't intercept; browser handles caching.
+  // Touching range requests in a service worker breaks the protocol.
+  if (url.pathname.endsWith('.pmtiles')) return;
+
   // Basemap raster tiles (CARTO + Esri) — cache-first
   if (url.hostname.endsWith('basemaps.cartocdn.com') ||
       url.hostname === 'server.arcgisonline.com') {
