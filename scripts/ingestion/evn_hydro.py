@@ -28,9 +28,28 @@ def parse_int(val):
         return None
 
 def scrape():
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9,vi;q=0.8',
+    }
+    
     print(f"[{datetime.now()}] Fetching data from {URL}...")
-    response = requests.get(URL, timeout=30)
-    response.raise_for_status()
+    
+    # Try multiple times with a retry mechanism
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(URL, headers=headers, timeout=60)
+            response.raise_for_status()
+            break
+        except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
+            if attempt == max_retries - 1:
+                print(f"Failed to fetch data after {max_retries} attempts: {e}")
+                raise
+            print(f"Attempt {attempt + 1} failed, retrying in 5s... ({e})")
+            import time
+            time.sleep(5)
     
     soup = BeautifulSoup(response.text, 'html.parser')
     tables = soup.find_all('table')
